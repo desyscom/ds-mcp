@@ -11,7 +11,7 @@ O conteúdo vive em Markdown (`standards/`), separado do código — editar um `
 | Tool | `get_standard` | Ler um doc completo pelo id |
 | Tool | `get_guardrails` | Guardrails + glossário por `stacks` e `phase` (`plan` / `implement` / `review`) |
 | Tool | `check_references` | Escaneia diff ou caminho atrás de referências indevidas em comentários (DOC-004/005/006/010, SCOPE-001) |
-| Tool | `check_language` | Escaneia comentários, nomes de teste e `.md` atrás de tradução literal de jargão (LANG-002) e texto em inglês (LANG-001), usando `all/vocabulary` + `docs/glossary.md` do projeto |
+| Tool | `check_language` | Escaneia comentários, nomes de teste e `.md` atrás de tradução literal de jargão (LANG-002) e texto em inglês (LANG-001), usando `all/vocabulary`, o `GLOSSARY.md` de domínio (campo `_Avoid_`, formato das skills do Matt Pocock) e o `docs/glossary.md` do projeto, do mais genérico ao mais específico |
 | Tool | `check_project` | Auditoria automática somente-leitura de um projeto |
 | Resource | `standards://{id}` | Cada doc como recurso |
 | Prompt | `start_task` | Inicia tarefa já com guardrails + padrões (fase default: implement) |
@@ -74,7 +74,7 @@ Orientar não basta: os hooks aplicam o que é determinístico. Código em `src/
 |---|---|
 | `SessionStart` | Lembrete curto (princípio, stacks do projeto, "chame `get_guardrails`"). Não despeja as regras. |
 | `PreToolUse` | **Bloqueia**: ler/versionar `.env` e chaves, dump do ambiente (SEC-001/003), segredo conhecido no código (SEC-002), `it.skip/only`/xfail (TEST-003), referência a issue/PR/ticket/conversa e `TODO(ref)` em comentário (DOC-004).<br>**Pede confirmação**: dependência nova ou atualização (DEP-001/004/005), IAM/RBAC/chmod amplo (SEC-007), `curl \| sh` (SEC-004), desabilitar lint/tipos (TEST-003), enfraquecer TLS/CORS (SEC-005), apagar teste (TEST-005), escrever `.env` (SEC-003).<br>**Só avisa** (contexto ao agente): ADR/spec/URL em comentário, TODO simples, jargão traduzido, texto em inglês, segredo literal suspeito. |
-| `Stop` | Gate sobre o `git diff` + arquivos novos: bloqueia o encerramento se sobrou violação de nível *deny* (cobre escrita via shell). No máximo 2 bloqueios por problema (anti-loop). Fora de repo git, não faz nada. |
+| `Stop` | Gate sobre o `git diff` **desde o início da sessão** (o SessionStart guarda o HEAD inicial, então commits feitos pelo agente, como na skill `implement`, também entram) + arquivos novos: bloqueia o encerramento se sobrou violação de nível *deny* (cobre escrita via shell). No máximo 2 bloqueios por problema (anti-loop). Fora de repo git, não faz nada. |
 
 Princípios: só linhas **adicionadas** são avaliadas (comentário legado não bloqueia, DOC-012); heurísticas (idioma) nunca bloqueiam; erro interno do hook **nunca** trava o agente (fail-open, exit 0).
 

@@ -115,5 +115,17 @@ assert.match(b.reason, /SEC-003/);
 writeFileSync(join(repo, ".gitignore"), ".env\n");
 assert.equal(stop("env2"), ""); // ignorado: ok
 
+// ---- violação COMMITADA durante a sessão (skills como implement commitam sozinhas) ----
+const startSession = (sid) => run("session-start", { hook_event_name: "SessionStart", cwd: repo, session_id: `${sid}-${RUN}`, source: "startup" });
+startSession("commit"); // grava o HEAD inicial da sessão
+writeFileSync(join(repo, "src", "b.ts"), "// Ajuste conforme issue #123\nexport const b = 1;\n");
+git("add", "-A");
+git("commit", "-q", "-m", "feat: b");
+assert.equal(stop("sem-base"), ""); // sem base registrada o gate só vê o working tree: não vê o commit
+startSession("commit"); // retomada/compactação não pode sobrescrever a base original
+b = json(stop("commit"));
+assert.match(b.reason, /DOC-004/);
+assert.match(b.reason, /b\.ts:1/);
+
 for (const d of [proj, off, noReason, repo]) rmSync(d, { recursive: true, force: true });
 console.log(`hooks: ${n} execuções ok`);

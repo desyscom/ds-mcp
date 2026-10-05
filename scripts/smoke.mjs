@@ -65,10 +65,12 @@ assert.doesNotMatch(lang, /lang\.ts:5 /); // `canalização` em code span é cit
 
 const proj = await call("check_language", { path: "scripts/fixtures/proj" });
 console.log(proj + "\n");
-assert.match(proj, /glossário do projeto: .*glossary\.md/);
+assert.match(proj, /glossário do projeto: .*GLOSSARY\.md.*glossary\.md/i); // as duas fontes, domínio e projeto
 assert.match(proj, /LANG-002\s+src[\\/]a\.ts:1 .*fatura/); // avoid definido pelo projeto
 assert.match(proj, /LANG-002\s+src[\\/]a\.ts:2 .*publicação/); // projeto adiciona avoid a termo do base
 assert.doesNotMatch(proj, /a\.ts:3 /);
+assert.match(proj, /LANG-002\s+src[\\/]a\.ts:4 .*cupom.*Nota fiscal/); // `_Avoid_` do GLOSSARY.md de domínio
+assert.doesNotMatch(proj, /LANG-002\s+GLOSSARY\.md/); // o próprio glossário não é escaneado
 assert.match(proj, /LANG-002\s+README\.md:4 .*mesclagem/);
 assert.doesNotMatch(proj, /README\.md:(3|7) /); // smoke test ok; bloco de código ignorado
 

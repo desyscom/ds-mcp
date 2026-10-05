@@ -25,11 +25,36 @@ export function parseVocabulary(md: string): Entry[] {
   return out;
 }
 
-/** Procura docs/glossary.md subindo a partir de `start` (até 6 níveis). */
-function findProjectGlossary(start: string): string | null {
+/**
+ * Glossário de domínio no formato do GLOSSARY.md (skills domain-modeling / grill-with-docs):
+ *   **Termo**:
+ *   Definição.
+ *   _Avoid_: apelido1, apelido2
+ * `_Avoid_` vira a coluna "Evitar"; o termo vira o "Preferido".
+ */
+export function parseDomainGlossary(md: string): Entry[] {
+  const out: Entry[] = [];
+  let current: string | null = null;
+  for (const line of md.split(/\r?\n/)) {
+    const term = /^\s*\*\*(.+?)\*\*\s*:?\s*$/.exec(line);
+    if (term) {
+      current = term[1].trim();
+      continue;
+    }
+    const avoid = /^\s*[_*]Avoid[_*]\s*:\s*(.+)$/i.exec(line);
+    if (avoid && current) {
+      const words = avoid[1].split(/[,;]/).map((x) => x.trim().replace(/^[`"'_*]+|[`"'_*.]+$/g, "")).filter(Boolean);
+      out.push({ term: current.toLowerCase(), preferred: current, avoid: words });
+    }
+  }
+  return out;
+}
+
+/** Procura `rel` (ex.: docs/glossary.md) subindo a partir de `start` (até 6 níveis). */
+function findUp(start: string, rel: string): string | null {
   let dir = statSync(start).isFile() ? dirname(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join(dir, "docs", "glossary.md");
+    const candidate = join(dir, rel);
     if (existsSync(candidate)) return candidate;
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -38,14 +63,30 @@ function findProjectGlossary(start: string): string | null {
   return null;
 }
 
-/** Vocabulário-base + glossário do projeto (o do projeto sobrescreve por termo). */
+/**
+ * Vocabulário-base, depois `GLOSSARY.md` (domínio), depois `docs/glossary.md` (projeto).
+ * O mais específico sobrescreve por termo. `projectGlossary` lista as fontes encontradas.
+ */
 export function loadVocabulary(projectStart?: string): { entries: Entry[]; projectGlossary: string | null } {
   const merged = new Map<string, Entry>();
+  const put = (list: Entry[]) => list.forEach((e) => merged.set(e.term, e));
   const base = join(standardsDir, "all", "vocabulary.md");
-  if (existsSync(base)) for (const e of parseVocabulary(readFileSync(base, "utf8"))) merged.set(e.term, e);
-  const projectGlossary = projectStart && existsSync(projectStart) ? findProjectGlossary(projectStart) : null;
-  if (projectGlossary) for (const e of parseVocabulary(readFileSync(projectGlossary, "utf8"))) merged.set(e.term, e);
-  return { entries: [...merged.values()], projectGlossary };
+  if (existsSync(base)) put(parseVocabulary(readFileSync(base, "utf8")));
+
+  const sources: string[] = [];
+  if (projectStart && existsSync(projectStart)) {
+    const domain = findUp(projectStart, "GLOSSARY.md");
+    if (domain) {
+      put(parseDomainGlossary(readFileSync(domain, "utf8")));
+      sources.push(domain);
+    }
+    const project = findUp(projectStart, join("docs", "glossary.md"));
+    if (project) {
+      put(parseVocabulary(readFileSync(project, "utf8")));
+      sources.push(project);
+    }
+  }
+  return { entries: [...merged.values()], projectGlossary: sources.length ? sources.join(", ") : null };
 }
 
 const EN = new Set("the is are and to of for this that with from in on it be by or not when if will can should must we you your our which has have was were an at into than then so also but".split(" "));

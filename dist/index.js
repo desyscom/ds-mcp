@@ -40525,10 +40525,27 @@ function parseVocabulary(md) {
   }
   return out;
 }
-function findProjectGlossary(start) {
+function parseDomainGlossary(md) {
+  const out = [];
+  let current = null;
+  for (const line of md.split(/\r?\n/)) {
+    const term = /^\s*\*\*(.+?)\*\*\s*:?\s*$/.exec(line);
+    if (term) {
+      current = term[1].trim();
+      continue;
+    }
+    const avoid = /^\s*[_*]Avoid[_*]\s*:\s*(.+)$/i.exec(line);
+    if (avoid && current) {
+      const words = avoid[1].split(/[,;]/).map((x) => x.trim().replace(/^[`"'_*]+|[`"'_*.]+$/g, "")).filter(Boolean);
+      out.push({ term: current.toLowerCase(), preferred: current, avoid: words });
+    }
+  }
+  return out;
+}
+function findUp(start, rel) {
   let dir = statSync3(start).isFile() ? dirname2(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join4(dir, "docs", "glossary.md");
+    const candidate = join4(dir, rel);
     if (existsSync2(candidate)) return candidate;
     const parent = dirname2(dir);
     if (parent === dir) break;
@@ -40538,11 +40555,23 @@ function findProjectGlossary(start) {
 }
 function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
+  const put = (list) => list.forEach((e) => merged.set(e.term, e));
   const base = join4(standardsDir, "all", "vocabulary.md");
-  if (existsSync2(base)) for (const e of parseVocabulary(readFileSync4(base, "utf8"))) merged.set(e.term, e);
-  const projectGlossary = projectStart && existsSync2(projectStart) ? findProjectGlossary(projectStart) : null;
-  if (projectGlossary) for (const e of parseVocabulary(readFileSync4(projectGlossary, "utf8"))) merged.set(e.term, e);
-  return { entries: [...merged.values()], projectGlossary };
+  if (existsSync2(base)) put(parseVocabulary(readFileSync4(base, "utf8")));
+  const sources = [];
+  if (projectStart && existsSync2(projectStart)) {
+    const domain2 = findUp(projectStart, "GLOSSARY.md");
+    if (domain2) {
+      put(parseDomainGlossary(readFileSync4(domain2, "utf8")));
+      sources.push(domain2);
+    }
+    const project = findUp(projectStart, join4("docs", "glossary.md"));
+    if (project) {
+      put(parseVocabulary(readFileSync4(project, "utf8")));
+      sources.push(project);
+    }
+  }
+  return { entries: [...merged.values()], projectGlossary: sources.length ? sources.join(", ") : null };
 }
 var EN = new Set("the is are and to of for this that with from in on it be by or not when if will can should must we you your our which has have was were an at into than then so also but".split(" "));
 var PT = new Set("o os de do da dos das que para por com n\xE3o uma um \xE9 em no na nos nas se ao \xE0 como mais mas ou sem sobre entre quando j\xE1 tamb\xE9m ser s\xE3o foi est\xE1 est\xE3o pelo pela deve".split(" "));

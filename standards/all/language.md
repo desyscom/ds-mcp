@@ -9,11 +9,11 @@ summary: Escrever em pt-BR sem traduzir literalmente o vocabulário técnico.
 > pt-BR define o **idioma da comunicação**, não a tradução dos termos técnicos.
 > Traduza conceitos de negócio; preserve o vocabulário técnico canônico.
 
-- `LANG-001` Escreva em **pt-BR**: comentários, docstrings, documentação (`.md`), ADRs, descrição de commit, texto de PR e issue, descrição de testes e a conversa com o usuário.
+- `LANG-001` Escreva em **pt-BR**: comentários, docstrings, documentação (`.md`), ADRs, specs, tickets, definições do `GLOSSARY.md`, descrição de commit, texto de PR e issue, descrição de testes e a conversa com o usuário. Isso vale também para o que skills de terceiros geram (specs, ADRs, tickets): o idioma padrão delas costuma ser inglês, e aqui prevalece pt-BR (PREC-001).
   Prefixos de Conventional Commits (`feat:`, `fix:`) ficam em inglês. Strings exibidas ao usuário final e mensagens de log seguem a convenção que o projeto já usa.
 - `LANG-002` Não faça tradução literal de vocabulário técnico (`smoke test` ≠ "teste de fumaça", `seed` ≠ "semente", `pipeline` ≠ "canalização", `payload` ≠ "carga útil", `hook` ≠ "gancho", `branch` ≠ "ramificação", `endpoint` ≠ "ponto final").
   Para decidir um termo, siga esta ordem e pare no primeiro que se aplicar:
-  1. está no glossário do projeto (`docs/glossary.md`)? use-o;
+  1. está no glossário do projeto (`docs/glossary.md`) ou de domínio (`GLOSSARY.md`, campo `_Avoid_`)? use-o;
   2. está no vocabulário-base (`all/vocabulary`, via `get_standard`)? use o termo preferido;
   3. nomeia construção que existe no código (classe, decorator, pasta: service, controller, repository, module, handler)? mantenha em inglês;
   4. é conceito de negócio ou palavra geral (usuário, cliente, venda, banco de dados, autenticação)? use pt-BR;

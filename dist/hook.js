@@ -3687,10 +3687,27 @@ function parseVocabulary(md) {
   }
   return out;
 }
-function findProjectGlossary(start) {
+function parseDomainGlossary(md) {
+  const out = [];
+  let current = null;
+  for (const line of md.split(/\r?\n/)) {
+    const term = /^\s*\*\*(.+?)\*\*\s*:?\s*$/.exec(line);
+    if (term) {
+      current = term[1].trim();
+      continue;
+    }
+    const avoid = /^\s*[_*]Avoid[_*]\s*:\s*(.+)$/i.exec(line);
+    if (avoid && current) {
+      const words = avoid[1].split(/[,;]/).map((x) => x.trim().replace(/^[`"'_*]+|[`"'_*.]+$/g, "")).filter(Boolean);
+      out.push({ term: current.toLowerCase(), preferred: current, avoid: words });
+    }
+  }
+  return out;
+}
+function findUp(start, rel) {
   let dir = statSync(start).isFile() ? dirname3(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join3(dir, "docs", "glossary.md");
+    const candidate = join3(dir, rel);
     if (existsSync2(candidate)) return candidate;
     const parent = dirname3(dir);
     if (parent === dir) break;
@@ -3700,11 +3717,23 @@ function findProjectGlossary(start) {
 }
 function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
+  const put = (list) => list.forEach((e) => merged.set(e.term, e));
   const base = join3(standardsDir, "all", "vocabulary.md");
-  if (existsSync2(base)) for (const e of parseVocabulary(readFileSync2(base, "utf8"))) merged.set(e.term, e);
-  const projectGlossary = projectStart && existsSync2(projectStart) ? findProjectGlossary(projectStart) : null;
-  if (projectGlossary) for (const e of parseVocabulary(readFileSync2(projectGlossary, "utf8"))) merged.set(e.term, e);
-  return { entries: [...merged.values()], projectGlossary };
+  if (existsSync2(base)) put(parseVocabulary(readFileSync2(base, "utf8")));
+  const sources = [];
+  if (projectStart && existsSync2(projectStart)) {
+    const domain = findUp(projectStart, "GLOSSARY.md");
+    if (domain) {
+      put(parseDomainGlossary(readFileSync2(domain, "utf8")));
+      sources.push(domain);
+    }
+    const project = findUp(projectStart, join3("docs", "glossary.md"));
+    if (project) {
+      put(parseVocabulary(readFileSync2(project, "utf8")));
+      sources.push(project);
+    }
+  }
+  return { entries: [...merged.values()], projectGlossary: sources.length ? sources.join(", ") : null };
 }
 var EN = new Set("the is are and to of for this that with from in on it be by or not when if will can should must we you your our which has have was were an at into than then so also but".split(" "));
 var PT = new Set("o os de do da dos das que para por com n\xE3o uma um \xE9 em no na nos nas se ao \xE0 como mais mas ou sem sobre entre quando j\xE1 tamb\xE9m ser s\xE3o foi est\xE1 est\xE3o pelo pela deve".split(" "));
@@ -3952,18 +3981,39 @@ ${fmt([...ask, ...warn])}` });
 ${fmt(warn)}` });
 }
 var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+var stateFile = (kind, sid) => join4(tmpdir(), `ds-mcp-${kind}-${String(sid ?? "x").replace(/\W/g, "")}.json`);
+function recordBase(input, cwd) {
+  const file = stateFile("base", input.session_id);
+  if (existsSync3(file)) return;
+  try {
+    writeFileSync(file, JSON.stringify({ head: git(cwd, ["rev-parse", "HEAD"]).trim() }));
+  } catch {
+  }
+}
+function sessionBase(input, cwd) {
+  try {
+    const head = JSON.parse(readFileSync3(stateFile("base", input.session_id), "utf8")).head;
+    if (typeof head === "string" && /^[0-9a-f]{7,40}$/.test(head)) {
+      git(cwd, ["cat-file", "-e", `${head}^{commit}`]);
+      return head;
+    }
+  } catch {
+  }
+  return "HEAD";
+}
 function stopGate(input, cfg, cwd) {
   let diff = "";
   let untracked = [];
   let changed = [];
   try {
+    const base = sessionBase(input, cwd);
     try {
-      diff = git(cwd, ["diff", "HEAD", "--unified=0"]);
+      diff = git(cwd, ["diff", base, "--unified=0"]);
     } catch {
       diff = git(cwd, ["diff", "--unified=0"]);
     }
     untracked = git(cwd, ["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
-    changed = git(cwd, ["diff", "HEAD", "--name-only"]).split(/\r?\n/).filter(Boolean);
+    changed = git(cwd, ["diff", base, "--name-only"]).split(/\r?\n/).filter(Boolean);
   } catch {
     return;
   }
@@ -3979,23 +4029,24 @@ function stopGate(input, cfg, cwd) {
   const blocking = applyConfig(found, cfg).filter((x) => x.level === "deny");
   if (!blocking.length) return;
   const reason = fmt(blocking);
-  const stateFile = join4(tmpdir(), `ds-mcp-stop-${String(input.session_id ?? "x").replace(/\W/g, "")}.json`);
+  const stopState = stateFile("stop", input.session_id);
   const hash = createHash("sha1").update(reason).digest("hex");
   let state = {};
   try {
-    state = JSON.parse(readFileSync3(stateFile, "utf8"));
+    state = JSON.parse(readFileSync3(stopState, "utf8"));
   } catch {
   }
   const count = state.hash === hash ? state.count ?? 0 : 0;
   if (count >= 2) return;
   try {
-    writeFileSync(stateFile, JSON.stringify({ hash, count: count + 1 }));
+    writeFileSync(stopState, JSON.stringify({ hash, count: count + 1 }));
   } catch {
   }
   emit({ decision: "block", reason: `ds-mcp: o diff viola guardrails. Corrija antes de encerrar (ou explique ao usu\xE1rio por que n\xE3o \xE9 poss\xEDvel):
 ${reason}` });
 }
-function sessionStart(cfg) {
+function sessionStart(cfg, input, cwd) {
+  recordBase(input, cwd);
   const stacks = cfg.stacks.length ? `Stacks do projeto (.ds-mcp.json): ${cfg.stacks.join(", ")}.` : 'Stacks do projeto n\xE3o configuradas: crie `.ds-mcp.json` com {"stacks":["react","nestjs"]} ou informe-as ao chamar get_guardrails.';
   const exceptions = [
     ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
@@ -4024,7 +4075,7 @@ function main() {
   const cfg = loadProjectConfig(cwd);
   if (event === "pre-tool-use") preToolUse(input, cfg, cwd);
   else if (event === "stop") stopGate(input, cfg, cwd);
-  else if (event === "session-start") sessionStart(cfg);
+  else if (event === "session-start") sessionStart(cfg, input, cwd);
 }
 try {
   main();

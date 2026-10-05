@@ -28,7 +28,7 @@ summary: Documente o porquê, não a origem. Código não é índice de document
 - `DOC-006` Não propague referências. Ter lido um ADR ao implementar não o leva para todos os arquivos relacionados. A densidade de referências de um arquivo é proporcional às decisões não óbvias **daquele trecho**, não ao volume de documentação da funcionalidade.
 - `DOC-007` Não comente o que a implementação já deixa evidente, nem o que o nome já diz, nem a origem da tarefa, nem o processo pelo qual a decisão foi tomada.
 - `DOC-008` Comentários explicam principalmente o **porquê**, restrições e comportamentos não óbvios. Formato ideal: *o que acontece + por quê + o que deve ser preservado*.
-- `DOC-010` Referência aponta para a **fonte canônica** da decisão e para nada além: sem cadeia (código → issue → PR → doc → doc). Use somente ID estável (`ADR-017`), nunca URL, âncora ou número de linha, e uma referência por ponto.
+- `DOC-010` Referência aponta para a **fonte canônica** da decisão e para nada além: sem cadeia (código → issue → PR → doc → doc). Use somente ID estável (`ADR-0017`, os 4 dígitos do arquivo `docs/adr/0017-*.md`), nunca URL, âncora ou número de linha, e uma referência por ponto.
 - `DOC-011` Só cite ADR/spec que você **leu** e confirmou que diz o que o comentário afirma. Nunca invente ou "lembre" um número.
 - `DOC-012` Estas regras valem para o que você escreve ou modifica. Não remova nem reescreva comentários e referências existentes fora do escopo da tarefa (SCOPE-001). Se um comentário que você já está alterando tem referência obsoleta, corrija-o.
 

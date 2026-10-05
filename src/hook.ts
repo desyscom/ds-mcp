@@ -71,14 +71,36 @@ function preToolUse(input: any, cfg: ProjectConfig, cwd: string) {
 // ---------- Stop: gate final sobre o diff ----------
 const git = (cwd: string, args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
 
+/** Estado por sessão em tmpdir (base do diff, anti-loop do Stop). */
+const stateFile = (kind: string, sid: unknown) => join(tmpdir(), `ds-mcp-${kind}-${String(sid ?? "x").replace(/\W/g, "")}.json`);
+
+/** SessionStart grava o HEAD inicial: skills que commitam sozinhas (ex.: implement) não escapam do gate. */
+function recordBase(input: any, cwd: string) {
+  const file = stateFile("base", input.session_id);
+  if (existsSync(file)) return; // retomada/compactação mantém a base original
+  try { writeFileSync(file, JSON.stringify({ head: git(cwd, ["rev-parse", "HEAD"]).trim() })); } catch { /* sem git ou sem commits: o gate usa HEAD */ }
+}
+
+function sessionBase(input: any, cwd: string): string {
+  try {
+    const head = JSON.parse(readFileSync(stateFile("base", input.session_id), "utf8")).head;
+    if (typeof head === "string" && /^[0-9a-f]{7,40}$/.test(head)) {
+      git(cwd, ["cat-file", "-e", `${head}^{commit}`]); // sumiu (rebase/gc)? cai para HEAD
+      return head;
+    }
+  } catch { /* sem base registrada */ }
+  return "HEAD";
+}
+
 function stopGate(input: any, cfg: ProjectConfig, cwd: string) {
   let diff = "";
   let untracked: string[] = [];
   let changed: string[] = [];
   try {
-    try { diff = git(cwd, ["diff", "HEAD", "--unified=0"]); } catch { diff = git(cwd, ["diff", "--unified=0"]); }
+    const base = sessionBase(input, cwd);
+    try { diff = git(cwd, ["diff", base, "--unified=0"]); } catch { diff = git(cwd, ["diff", "--unified=0"]); }
     untracked = git(cwd, ["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
-    changed = git(cwd, ["diff", "HEAD", "--name-only"]).split(/\r?\n/).filter(Boolean);
+    changed = git(cwd, ["diff", base, "--name-only"]).split(/\r?\n/).filter(Boolean);
   } catch {
     return; // não é repositório git: sem gate
   }
@@ -99,19 +121,20 @@ function stopGate(input: any, cfg: ProjectConfig, cwd: string) {
 
   // Anti-loop: bloqueia no máximo 2 vezes por sessão para o mesmo conjunto de problemas.
   const reason = fmt(blocking);
-  const stateFile = join(tmpdir(), `ds-mcp-stop-${String(input.session_id ?? "x").replace(/\W/g, "")}.json`);
+  const stopState = stateFile("stop", input.session_id);
   const hash = createHash("sha1").update(reason).digest("hex");
   let state: { hash?: string; count?: number } = {};
-  try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch { /* primeira vez */ }
+  try { state = JSON.parse(readFileSync(stopState, "utf8")); } catch { /* primeira vez */ }
   const count = state.hash === hash ? (state.count ?? 0) : 0;
   if (count >= 2) return;
-  try { writeFileSync(stateFile, JSON.stringify({ hash, count: count + 1 })); } catch { /* sem estado: o cap de bloqueios do Claude Code ainda protege */ }
+  try { writeFileSync(stopState, JSON.stringify({ hash, count: count + 1 })); } catch { /* sem estado: o cap de bloqueios do Claude Code ainda protege */ }
 
   emit({ decision: "block", reason: `ds-mcp: o diff viola guardrails. Corrija antes de encerrar (ou explique ao usuário por que não é possível):\n${reason}` });
 }
 
 // ---------- SessionStart: lembrete curto, não despeja as regras ----------
-function sessionStart(cfg: ProjectConfig) {
+function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
+  recordBase(input, cwd);
   const stacks = cfg.stacks.length
     ? `Stacks do projeto (.ds-mcp.json): ${cfg.stacks.join(", ")}.`
     : 'Stacks do projeto não configuradas: crie `.ds-mcp.json` com {"stacks":["react","nestjs"]} ou informe-as ao chamar get_guardrails.';
@@ -141,7 +164,7 @@ function main() {
   const cfg = loadProjectConfig(cwd);
   if (event === "pre-tool-use") preToolUse(input, cfg, cwd);
   else if (event === "stop") stopGate(input, cfg, cwd);
-  else if (event === "session-start") sessionStart(cfg);
+  else if (event === "session-start") sessionStart(cfg, input, cwd);
 }
 
 try {
