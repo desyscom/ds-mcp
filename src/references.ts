@@ -1,0 +1,161 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { extname, join, relative } from "node:path";
+
+export type Severity = "error" | "warn";
+
+export interface Finding {
+  file: string;
+  line: number;
+  rule: string;
+  severity: Severity;
+  message: string;
+  snippet: string;
+}
+
+export const SLASH_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
+export const HASH_EXT = new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
+export const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "coverage", ".turbo"]);
+export const MAX_FILE_BYTES = 512 * 1024;
+
+/** Texto de comentário da linha (heurística sem estado: vale igual para arquivo e diff). */
+export function commentText(line: string, ext: string): string | null {
+  const t = line.trim();
+  if (SLASH_EXT.has(ext)) {
+    if (/^(\/\*|\*)/.test(t)) return t;
+    const m = /(?<!:)\/\/(.*)$/.exec(line);
+    return m ? m[1] : null;
+  }
+  if (HASH_EXT.has(ext)) {
+    if (t.startsWith("#!")) return null;
+    const m = /(?:^|\s)#(.*)$/.exec(line);
+    return m ? m[1] : null;
+  }
+  return null;
+}
+
+/** Título de teste (describe/it/test): DOC-004 vale para nomes de teste. */
+export function testTitle(line: string): string | null {
+  const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
+  return m ? m[2] : null;
+}
+
+const NOT_TICKET = "ADR|SPEC|REQ|RN|RF|UTF|ISO|SHA|RFC|CVE|CWE|HTTP|TLS|MD|ES|IEEE|WCAG|ECMA|UTC|GMT|TCP|IPV|X|H|PT|EN";
+const RE = {
+  issueNumber: /(?:^|[^\w&])#\d{1,6}\b/,
+  issueWord: /\b(?:issue|ticket|PR|pull request|merge request|MR|chamado|card)\s*(?:n[ºo°.]?\s*)?#?\d+/i,
+  ticketKey: new RegExp(`\\b(?!(?:${NOT_TICKET})-)[A-Z][A-Z0-9]{1,9}-\\d+\\b`),
+  tracker: /(github\.com\/\S+\/(?:issues|pull)\/\d+|atlassian\.net|\bjira\.|linear\.app|gitlab\.\S+\/-\/(?:issues|merge_requests)|_workitems|trello\.com|notion\.so|slack\.com)/i,
+  discussion: /\b(?:conforme|segundo|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|call|slack|teams|whatsapp|e-?mail)\b/i,
+  todo: /\b(TODO|FIXME|HACK|XXX)\b(.*)/,
+  adr: /\bADR[- ]?(\d+)/i,
+  spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
+  url: /https?:\/\/\S+/,
+};
+
+function scanText(text: string, kind: "comment" | "test"): Omit<Finding, "file" | "line" | "snippet">[] {
+  const out: Omit<Finding, "file" | "line" | "snippet">[] = [];
+  const add = (rule: string, severity: Severity, message: string) => out.push({ rule, severity, message });
+
+  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || RE.ticketKey.test(text) || RE.tracker.test(text);
+  if (tracker) add("DOC-004", "error", "referência a issue/PR/ticket — descreva o comportamento, não a origem");
+  if (RE.discussion.test(text)) add("DOC-004", "error", "referência a conversa/discussão — consolide a decisão num ADR ou explique localmente");
+
+  if (kind === "comment") {
+    const todo = RE.todo.exec(text);
+    if (todo) {
+      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(todo[2]);
+      if (withRef) add("DOC-004", "error", `${todo[1]} com referência — pendência vai para o relatório/issue`);
+      else add("SCOPE-001", "warn", `${todo[1]} no código — registre como sugestão no relatório; limitação conhecida vira comentário descritivo`);
+    }
+    if (RE.adr.test(text)) add("DOC-005", "warn", "referência a ADR — só se for decisão/restrição não óbvia a preservar (DOC-003/005); explique localmente (DOC-002)");
+    if (RE.spec.test(text)) add("DOC-003", "warn", "referência normativa/spec — confirme que se enquadra em DOC-003");
+    if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em comentário — prefira ID estável da fonte canônica");
+  }
+  return out;
+}
+
+export function scanLines(file: string, lines: { n: number; text: string }[], ext: string): Finding[] {
+  const found: Finding[] = [];
+  const seen = new Set<string>();
+  for (const { n, text } of lines) {
+    const targets: { s: string; kind: "comment" | "test" }[] = [];
+    const c = commentText(text, ext);
+    if (c !== null) targets.push({ s: c, kind: "comment" });
+    const t = testTitle(text);
+    if (t !== null) targets.push({ s: t, kind: "test" });
+    for (const { s, kind } of targets) {
+      for (const f of scanText(s, kind)) {
+        const key = `${n}:${f.rule}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        found.push({ file, line: n, snippet: text.trim().slice(0, 140), ...f });
+      }
+    }
+  }
+  return found;
+}
+
+export function walk(p: string): string[] {
+  const st = statSync(p);
+  if (st.isFile()) return [p];
+  return readdirSync(p).flatMap((name) => (SKIP_DIRS.has(name) ? [] : walk(join(p, name))));
+}
+
+/** DOC-006: muitas referências a ADR/spec no mesmo arquivo, ou o mesmo ADR espalhado por vários arquivos. */
+function propagation(findings: Finding[]): Finding[] {
+  const out: Finding[] = [];
+  const perFile = new Map<string, Finding[]>();
+  const perAdr = new Map<string, Set<string>>();
+  for (const f of findings.filter((x) => x.rule === "DOC-005" || x.rule === "DOC-003")) {
+    perFile.set(f.file, [...(perFile.get(f.file) ?? []), f]);
+    const id = /ADR[- ]?(\d+)/i.exec(f.snippet)?.[1];
+    if (id) perAdr.set(id, (perAdr.get(id) ?? new Set()).add(f.file));
+  }
+  for (const [file, fs] of perFile)
+    if (fs.length >= 3)
+      out.push({ file, line: fs[0].line, rule: "DOC-006", severity: "warn", snippet: "", message: `${fs.length} referências documentais no mesmo arquivo — densidade proporcional às decisões não óbvias do trecho` });
+  for (const [id, files] of perAdr)
+    if (files.size >= 3)
+      out.push({ file: [...files][0], line: 0, rule: "DOC-006", severity: "warn", snippet: "", message: `ADR-${id} aparece em ${files.size} arquivos — possível propagação de referência` });
+  return out;
+}
+
+/** Linhas adicionadas de um diff unificado, por arquivo, com o número da linha no arquivo novo. */
+export function parseDiff(diff: string): Map<string, { n: number; text: string }[]> {
+  let file = "";
+  let n = 0;
+  const byFile = new Map<string, { n: number; text: string }[]>();
+  for (const raw of diff.split(/\r?\n/)) {
+    if (raw.startsWith("+++ ")) file = raw.slice(4).replace(/^b\//, "");
+    else if (raw.startsWith("@@")) n = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0) - 1;
+    else if (raw.startsWith("+")) { n++; byFile.set(file, [...(byFile.get(file) ?? []), { n, text: raw.slice(1) }]); }
+    else if (!raw.startsWith("-")) n++;
+  }
+  return byFile;
+}
+
+export function checkReferences(input: { path?: string; diff?: string }): Finding[] {
+  const findings: Finding[] = [];
+  if (input.diff) {
+    const byFile = parseDiff(input.diff);
+    for (const [f, lines] of byFile) findings.push(...scanLines(f, lines, extname(f)));
+  } else if (input.path) {
+    const root = input.path;
+    const isFile = statSync(root).isFile();
+    for (const file of walk(root)) {
+      const ext = extname(file);
+      if (!SLASH_EXT.has(ext) && !HASH_EXT.has(ext)) continue;
+      if (statSync(file).size > MAX_FILE_BYTES) continue;
+      const lines = readFileSync(file, "utf8").split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
+      findings.push(...scanLines(isFile ? file : relative(root, file), lines, ext));
+    }
+  }
+  return [...findings, ...propagation(findings)];
+}
+
+export function formatFindings(findings: Finding[]): string {
+  if (!findings.length) return "Nenhuma referência suspeita encontrada.";
+  const errors = findings.filter((f) => f.severity === "error").length;
+  const rows = findings.map((f) => `${f.severity.toUpperCase().padEnd(5)} ${f.rule}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.message}${f.snippet ? `\n        > ${f.snippet}` : ""}`);
+  return `${errors} erro(s), ${findings.length - errors} alerta(s)\n\n${rows.join("\n")}`;
+}

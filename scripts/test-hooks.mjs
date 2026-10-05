@@ -1,0 +1,119 @@
+// Testa o protocolo dos hooks: stdin JSON → stdout JSON, sempre exit 0.
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const HOOK = join(process.cwd(), "dist", "hook.js");
+let n = 0;
+
+function run(event, input, raw) {
+  const r = spawnSync("node", [HOOK, event], { input: raw ?? JSON.stringify(input), encoding: "utf8" });
+  assert.equal(r.status, 0, `exit code deve ser 0, veio ${r.status}: ${r.stderr}`);
+  n++;
+  return r.stdout;
+}
+const json = (s) => JSON.parse(s);
+const specific = (s) => json(s).hookSpecificOutput;
+
+const proj = mkdtempSync(join(tmpdir(), "ds-hook-"));
+writeFileSync(join(proj, ".ds-mcp.json"), JSON.stringify({ stacks: ["react", "nestjs"], disable: [] }));
+const pre = (tool_name, tool_input, cwd = proj) => run("pre-tool-use", { hook_event_name: "PreToolUse", cwd, tool_name, tool_input });
+
+// ---- PreToolUse: deny ----
+let o = specific(pre("Read", { file_path: join(proj, ".env") }));
+assert.equal(o.hookEventName, "PreToolUse");
+assert.equal(o.permissionDecision, "deny");
+assert.match(o.permissionDecisionReason, /SEC-001/);
+assert.equal(specific(pre("Bash", { command: "cat .env.local" })).permissionDecision, "deny");
+assert.equal(specific(pre("Grep", { pattern: "KEY", glob: ".env*" })).permissionDecision, "deny");
+assert.equal(specific(pre("Write", { file_path: "src/a.ts", content: "// Corrige issue #481\nconst a = 1;" })).permissionDecision, "deny");
+assert.equal(specific(pre("Edit", { file_path: "src/a.spec.ts", old_string: "it('a', f)", new_string: "it.skip('a', f)" })).permissionDecision, "deny");
+assert.equal(specific(pre("MultiEdit", { file_path: "src/a.ts", edits: [{ old_string: "x", new_string: "const k = 'AKIAABCDEFGHIJKLMNOP';" }] })).permissionDecision, "deny");
+
+// ---- PreToolUse: ask ----
+o = specific(pre("Bash", { command: "npm install lodash" }));
+assert.equal(o.permissionDecision, "ask");
+assert.match(o.permissionDecisionReason, /DEP-001/);
+assert.equal(specific(pre("Bash", { command: "aws iam attach-role-policy --role-name a --policy-arn b" })).permissionDecision, "ask");
+
+// ---- PreToolUse: avisos viram contexto, não bloqueiam ----
+o = specific(pre("Write", { file_path: "src/a.ts", content: "// Roda o teste de fumaça antes do deploy.\nconst a = 1;" }));
+assert.equal(o.permissionDecision, undefined);
+assert.match(o.additionalContext, /LANG-002/);
+
+// ---- PreToolUse: não decide nada quando está tudo certo ----
+assert.equal(pre("Bash", { command: "npm run test" }), "");
+assert.equal(pre("Read", { file_path: join(proj, ".env.example") }), "");
+assert.equal(pre("Write", { file_path: "src/a.ts", content: "// Usa o preço capturado na venda.\nconst a = 1;" }), "");
+assert.equal(pre("Glob", { pattern: "**/*.ts" }), "");
+
+// ---- Edit só avalia linhas novas: legado preservado (DOC-012) ----
+assert.equal(
+  pre("Edit", { file_path: "src/a.ts", old_string: "// Corrige issue #1\nconst a = 1;", new_string: "// Corrige issue #1\nconst a = 2;" }),
+  "",
+);
+
+// ---- .ds-mcp.json: disable exige motivo (PREC-003) ----
+const off = mkdtempSync(join(tmpdir(), "ds-hook-off-"));
+writeFileSync(join(off, ".ds-mcp.json"), JSON.stringify({ disable: [{ rule: "DOC-004", reason: "Convenção do time usa TODO(ticket)" }] }));
+const BAD = { file_path: "src/a.ts", content: "// Corrige issue #481\nconst a = 1;" };
+assert.equal(pre("Write", BAD, off), ""); // exceção válida: desligada
+
+const noReason = mkdtempSync(join(tmpdir(), "ds-hook-noreason-"));
+writeFileSync(join(noReason, ".ds-mcp.json"), JSON.stringify({ disable: ["DOC-004", { rule: "DOC-004" }, { rule: "DOC-004", reason: "curto" }] }));
+assert.equal(specific(pre("Write", BAD, noReason)).permissionDecision, "deny"); // sem motivo: regra continua ativa
+
+// ---- PREC-003: o agente não edita a própria exceção nem desliga hooks ----
+assert.equal(specific(pre("Write", { file_path: ".ds-mcp.json", content: '{"disable":[]}' })).permissionDecision, "ask");
+assert.equal(specific(pre("Edit", { file_path: join(proj, ".ds-mcp.json"), old_string: "[]", new_string: "[1]" })).permissionDecision, "ask");
+assert.equal(specific(pre("Bash", { command: "sed -i 's/a/b/' .ds-mcp.json" })).permissionDecision, "ask");
+assert.equal(specific(pre("Write", { file_path: ".claude/settings.json", content: '{"disableAllHooks": true}' })).permissionDecision, "ask");
+assert.equal(pre("Bash", { command: "cat .ds-mcp.json" }), ""); // leitura é livre
+assert.equal(pre("Read", { file_path: ".ds-mcp.json" }), "");
+
+// ---- robustez: stdin inválido / evento desconhecido não quebram ----
+assert.equal(run("pre-tool-use", null, "isto não é json"), "");
+assert.equal(run("evento-inexistente", {}), "");
+assert.equal(run("pre-tool-use", {}), "");
+
+// ---- SessionStart: texto simples, com as stacks do projeto ----
+let s = run("session-start", { hook_event_name: "SessionStart", cwd: proj, source: "startup" });
+assert.match(s, /react, nestjs/);
+assert.match(s, /get_guardrails/);
+assert.ok(s.length < 2500, "o lembrete deve ser curto");
+assert.match(run("session-start", { cwd: off }), /\.ds-mcp\.json/);
+
+// ---- Stop: gate sobre o diff ----
+const git = (...a) => execFileSync("git", a, { cwd: repo, stdio: "ignore" });
+const repo = mkdtempSync(join(tmpdir(), "ds-hook-git-"));
+git("init", "-q");
+git("config", "user.email", "t@t");
+git("config", "user.name", "t");
+mkdirSync(join(repo, "src"));
+writeFileSync(join(repo, "src", "a.ts"), "// Calcula o total.\nexport const a = 1;\n");
+git("add", "-A");
+git("commit", "-q", "-m", "init");
+const RUN = Date.now(); // o estado anti-loop persiste em tmpdir: sessões únicas por execução
+const stop = (sid = "s1") => run("stop", { hook_event_name: "Stop", cwd: repo, session_id: `${sid}-${RUN}` });
+
+assert.equal(stop("clean"), ""); // sem mudanças
+writeFileSync(join(repo, "src", "a.ts"), "// Calcula o total.\n// Implementado conforme issue #77\nexport const a = 2;\n");
+let b = json(stop("dirty"));
+assert.equal(b.decision, "block"); // decision/reason no nível raiz (formato documentado)
+assert.match(b.reason, /DOC-004/);
+assert.match(b.reason, /a\.ts:2/);
+assert.match(json(stop("dirty")).reason, /DOC-004/); // 2º bloqueio
+assert.equal(stop("dirty"), ""); // 3º: anti-loop libera
+writeFileSync(join(repo, "src", "a.ts"), "// Calcula o total.\nexport const a = 2;\n");
+assert.equal(stop("fixed"), ""); // corrigido: passa
+
+writeFileSync(join(repo, ".env"), "API_KEY=abc\n"); // .env não ignorado pelo git
+b = json(stop("env"));
+assert.match(b.reason, /SEC-003/);
+writeFileSync(join(repo, ".gitignore"), ".env\n");
+assert.equal(stop("env2"), ""); // ignorado: ok
+
+for (const d of [proj, off, noReason, repo]) rmSync(d, { recursive: true, force: true });
+console.log(`hooks: ${n} execuções ok`);

@@ -1,0 +1,38 @@
+{
+  "name": "ds-mcp",
+  "version": "0.1.0",
+  "description": "MCP server que expõe padrões, guardrails e prompts de desenvolvimento",
+  "type": "module",
+  "bin": {
+    "ds-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "standards",
+    "hooks",
+    ".claude-plugin",
+    ".mcp.json"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "smoke": "node scripts/smoke.mjs",
+    "test:policy": "node scripts/test-policy.mjs",
+    "test:hooks": "node scripts/test-hooks.mjs",
+    "test": "npm run build && npm run test:policy && npm run test:hooks && npm run smoke"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "gray-matter": "^4.0.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}
