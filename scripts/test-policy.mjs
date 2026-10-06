@@ -68,4 +68,23 @@ w(".claude/settings.json", "", '{"disableAllHooks": true}', "ask", "PREC-003");
 w(".claude/settings.json", "", '{"model": "haiku"}', "ok");
 w("src/a.ts", "", "// Roda o teste de fumaça antes do deploy.\nconst a = 1;", "warn", "LANG-002");
 
+// ---- mensagens de commit (COMMIT-001..003) ----
+const HD = (msg) => `git commit -m "$(cat <<'EOF'\n${msg}\nEOF\n)"`;
+bash('git commit -m "feat: adiciona o login"', "ok");
+bash('git commit -am "fix(api): corrige o total da venda"', "ok");
+bash('git commit -m "feat(core)!: remove o campo legado"', "ok");
+bash('git -C ../outro commit -m "fix: ajusta o timeout"', "ok");
+bash('git commit --amend --no-edit', "ok"); // sem mensagem: nada a avaliar
+bash('git commit -m "Merge branch \'x\' into main"', "ok"); // merge é ignorado
+bash('git log -m --oneline', "ok"); // não é commit
+bash('git commit -m "added login"', "deny", "COMMIT-001");
+bash('git commit -m "Fix the bug"', "deny", "COMMIT-001");
+bash('git status && git commit -m "ajustes gerais"', "deny", "COMMIT-001");
+bash('git commit -m "feat: add login support for users"', "warn", "COMMIT-002"); // verbo em inglês
+bash('git commit -m "feat: corrige o teste de fumaça do pipeline"', "warn", "LANG-002");
+bash(`git commit -m "fix: ${"a".repeat(80)}"`, "warn", "COMMIT-003");
+bash(HD('feat(core): adiciona o gate (stop)\n\n- corpo com "aspas" e (parênteses)\n- Closes #123\n\nCo-Authored-By: X <a@b.c>'), "ok"); // origem no commit é permitida
+bash(HD("update stuff\n\ncorpo"), "deny", "COMMIT-001");
+bash(HD("feat: adiciona login\n\nThis change adds a new login flow for the users of the app"), "warn", "LANG-001");
+
 console.log(`policy: ${n} casos ok`);

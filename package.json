@@ -11,7 +11,8 @@
     "standards",
     "hooks",
     ".claude-plugin",
-    ".mcp.json"
+    ".mcp.json",
+    "skills"
   ],
   "scripts": {
     "build": "tsc && node scripts/bundle.mjs",

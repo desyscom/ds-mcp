@@ -4396,17 +4396,17 @@ var require_core = __commonJS({
         return this.opts.defaultMeta = typeof meta3 == "object" ? meta3[schemaId] || meta3 : void 0;
       }
       validate(schemaKeyRef, data) {
-        let v;
+        let v2;
         if (typeof schemaKeyRef == "string") {
-          v = this.getSchema(schemaKeyRef);
-          if (!v)
+          v2 = this.getSchema(schemaKeyRef);
+          if (!v2)
             throw new Error(`no schema with key or ref "${schemaKeyRef}"`);
         } else {
-          v = this.compile(schemaKeyRef);
+          v2 = this.compile(schemaKeyRef);
         }
-        const valid = v(data);
-        if (!("$async" in v))
-          this.errors = v.errors;
+        const valid = v2(data);
+        if (!("$async" in v2))
+          this.errors = v2.errors;
         return valid;
       }
       compile(schema, _meta) {
@@ -4900,8 +4900,8 @@ var require_ref = __commonJS({
           return callRef(cxt, (0, codegen_1._)`${rootName}.validate`, root, root.$async);
         }
         function callValidate(sch) {
-          const v = getValidate(cxt, sch);
-          callRef(cxt, v, sch, sch.$async);
+          const v2 = getValidate(cxt, sch);
+          callRef(cxt, v2, sch, sch.$async);
         }
         function inlineRefSchema(sch) {
           const schName = gen.scopeValue("schema", opts.code.source === true ? { ref: sch, code: (0, codegen_1.stringify)(sch) } : { ref: sch });
@@ -4923,7 +4923,7 @@ var require_ref = __commonJS({
       return sch.validate ? gen.scopeValue("validate", { ref: sch.validate }) : (0, codegen_1._)`${gen.scopeValue("wrapper", { ref: sch })}.validate`;
     }
     exports2.getValidate = getValidate;
-    function callRef(cxt, v, sch, $async) {
+    function callRef(cxt, v2, sch, $async) {
       const { gen, it } = cxt;
       const { allErrors, schemaEnv: env, opts } = it;
       const passCxt = opts.passContext ? names_1.default.this : codegen_1.nil;
@@ -4936,8 +4936,8 @@ var require_ref = __commonJS({
           throw new Error("async schema referenced by sync schema");
         const valid = gen.let("valid");
         gen.try(() => {
-          gen.code((0, codegen_1._)`await ${(0, code_1.callValidateCode)(cxt, v, passCxt)}`);
-          addEvaluatedFrom(v);
+          gen.code((0, codegen_1._)`await ${(0, code_1.callValidateCode)(cxt, v2, passCxt)}`);
+          addEvaluatedFrom(v2);
           if (!allErrors)
             gen.assign(valid, true);
         }, (e) => {
@@ -4949,7 +4949,7 @@ var require_ref = __commonJS({
         cxt.ok(valid);
       }
       function callSyncRef() {
-        cxt.result((0, code_1.callValidateCode)(cxt, v, passCxt), () => addEvaluatedFrom(v), () => addErrorsFrom(v));
+        cxt.result((0, code_1.callValidateCode)(cxt, v2, passCxt), () => addEvaluatedFrom(v2), () => addErrorsFrom(v2));
       }
       function addErrorsFrom(source) {
         const errs = (0, codegen_1._)`${source}.errors`;
@@ -5448,7 +5448,7 @@ var require_enum = __commonJS({
         cxt.pass(valid);
         function loopEnum() {
           gen.assign(valid, false);
-          gen.forOf("v", schemaCode, (v) => gen.if((0, codegen_1._)`${getEql()}(${data}, ${v})`, () => gen.assign(valid, true).break()));
+          gen.forOf("v", schemaCode, (v2) => gen.if((0, codegen_1._)`${getEql()}(${data}, ${v2})`, () => gen.assign(valid, true).break()));
         }
         function equalCode(vSchema, i) {
           const sch = schema[i];
@@ -6834,7 +6834,7 @@ var require_ajv = __commonJS({
     var Ajv2 = class extends core_1.default {
       _addVocabularies() {
         super._addVocabularies();
-        draft7_1.default.forEach((v) => this.addVocabulary(v));
+        draft7_1.default.forEach((v2) => this.addVocabulary(v2));
         if (this.opts.discriminator)
           this.addKeyword(discriminator_1.default);
       }
@@ -7975,8 +7975,8 @@ var require_int = __commonJS({
         return sign * parseInt(value, 8);
       }
       if (value.indexOf(":") !== -1) {
-        value.split(":").forEach(function(v) {
-          digits.unshift(parseInt(v, 10));
+        value.split(":").forEach(function(v2) {
+          digits.unshift(parseInt(v2, 10));
         });
         value = 0;
         base = 1;
@@ -8054,8 +8054,8 @@ var require_float = __commonJS({
       } else if (value === ".nan") {
         return NaN;
       } else if (value.indexOf(":") >= 0) {
-        value.split(":").forEach(function(v) {
-          digits.unshift(parseFloat(v, 10));
+        value.split(":").forEach(function(v2) {
+          digits.unshift(parseFloat(v2, 10));
         });
         value = 0;
         base = 1;
@@ -15010,8 +15010,8 @@ function assertNever(_x) {
 function assert(_) {
 }
 function getEnumValues(entries) {
-  const numericValues = Object.values(entries).filter((v) => typeof v === "number");
-  const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
+  const numericValues = Object.values(entries).filter((v2) => typeof v2 === "number");
+  const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v2]) => v2);
   return values;
 }
 function joinValues(array2, separator = "|") {
@@ -15069,9 +15069,9 @@ function defineLazy(object3, key, getter) {
       }
       return value;
     },
-    set(v) {
+    set(v2) {
       Object.defineProperty(object3, key, {
-        value: v
+        value: v2
         // configurable: true,
       });
     },
@@ -17098,10 +17098,10 @@ var $ZodUUID = /* @__PURE__ */ $constructor("$ZodUUID", (inst, def) => {
       v7: 7,
       v8: 8
     };
-    const v = versionMap[def.version];
-    if (v === void 0)
+    const v2 = versionMap[def.version];
+    if (v2 === void 0)
       throw new Error(`Invalid UUID version: "${def.version}"`);
-    def.pattern ?? (def.pattern = uuid(v));
+    def.pattern ?? (def.pattern = uuid(v2));
   } else
     def.pattern ?? (def.pattern = uuid());
   $ZodStringFormat.init(inst, def);
@@ -17849,8 +17849,8 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
         if (!Object.prototype.hasOwnProperty.call(propValues, key)) {
           assignProp(propValues, key, /* @__PURE__ */ new Set());
         }
-        for (const v of field.values)
-          propValues[key].add(v);
+        for (const v2 of field.values)
+          propValues[key].add(v2);
         if (field.optin !== void 0)
           propValues[key].add(void 0);
       }
@@ -18196,11 +18196,11 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
         throw new Error(`Invalid discriminated union option at index "${zod.def.options.indexOf(option)}"`);
       if (pv[zod.def.discriminator]?.has(void 0))
         undefinedCount++;
-      for (const [k, v] of Object.entries(pv)) {
+      for (const [k, v2] of Object.entries(pv)) {
         if (!Object.prototype.hasOwnProperty.call(propValues, k)) {
           assignProp(propValues, k, /* @__PURE__ */ new Set());
         }
-        for (const val of v) {
+        for (const val of v2) {
           propValues[k].add(val);
         }
       }
@@ -18930,8 +18930,8 @@ var $ZodPrefault = /* @__PURE__ */ $constructor("$ZodPrefault", (inst, def) => {
 var $ZodNonOptional = /* @__PURE__ */ $constructor("$ZodNonOptional", (inst, def) => {
   $ZodType.init(inst, def);
   defineLazyInternal(inst, "values", (zod) => {
-    const v = zod.def.innerType._zod.values;
-    return v ? new Set([...v].filter((x) => x !== void 0)) : void 0;
+    const v2 = zod.def.innerType._zod.values;
+    return v2 ? new Set([...v2].filter((x) => x !== void 0)) : void 0;
   });
   inst._zod.parse = (payload, ctx) => {
     const result = def.innerType._zod.run(payload, ctx);
@@ -22108,7 +22108,7 @@ var error20 = () => {
         if (issue2.values.length === 1) {
           return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05E2\u05E8\u05DA \u05D7\u05D9\u05D9\u05D1 \u05DC\u05D4\u05D9\u05D5\u05EA ${stringifyPrimitive(issue2.values[0])}`;
         }
-        const stringified = issue2.values.map((v) => stringifyPrimitive(v));
+        const stringified = issue2.values.map((v2) => stringifyPrimitive(v2));
         if (issue2.values.length === 2) {
           return `\u05E2\u05E8\u05DA \u05DC\u05D0 \u05EA\u05E7\u05D9\u05DF: \u05D4\u05D0\u05E4\u05E9\u05E8\u05D5\u05D9\u05D5\u05EA \u05D4\u05DE\u05EA\u05D0\u05D9\u05DE\u05D5\u05EA \u05D4\u05DF ${stringified[0]} \u05D0\u05D5 ${stringified[1]}`;
         }
@@ -27366,8 +27366,8 @@ ${code}
   return fn;
 }
 function addConstant(ctx, value) {
-  for (const [name2, v] of ctx.constants) {
-    if (v === value)
+  for (const [name2, v2] of ctx.constants) {
+    if (v2 === value)
       return name2;
   }
   const name = `c${ctx.constantCounter++}`;
@@ -27510,9 +27510,9 @@ function generateChecks(doc, ctx, schema, accessor) {
 }
 function codePointLengthVar(doc, ctx, accessor, inDoubt) {
   const cpLen = addConstant(ctx, codePointLength);
-  const v = newVar(ctx);
-  doc.write(`const ${v} = typeof ${accessor} === "string" && ${inDoubt} ? ${cpLen}(${accessor}) : ${accessor}.length;`);
-  return v;
+  const v2 = newVar(ctx);
+  doc.write(`const ${v2} = typeof ${accessor} === "string" && ${inDoubt} ? ${cpLen}(${accessor}) : ${accessor}.length;`);
+  return v2;
 }
 function numericOperand(value, label) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -29625,7 +29625,7 @@ function _set(Class2, valueType, params) {
 }
 // @__NO_SIDE_EFFECTS__
 function _enum(Class2, values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v2) => [v2, v2])) : values;
   return new Class2({
     type: "enum",
     entries,
@@ -29831,8 +29831,8 @@ function _stringbool(Classes, _params) {
   let truthyArray = params.truthy ?? ["true", "1", "yes", "on", "y", "enabled"];
   let falsyArray = params.falsy ?? ["false", "0", "no", "off", "n", "disabled"];
   if (params.case !== "sensitive") {
-    truthyArray = truthyArray.map((v) => typeof v === "string" ? v.toLowerCase() : v);
-    falsyArray = falsyArray.map((v) => typeof v === "string" ? v.toLowerCase() : v);
+    truthyArray = truthyArray.map((v2) => typeof v2 === "string" ? v2.toLowerCase() : v2);
+    falsyArray = falsyArray.map((v2) => typeof v2 === "string" ? v2.toLowerCase() : v2);
   }
   const truthySet = new Set(truthyArray);
   const falsySet = new Set(falsyArray);
@@ -30643,9 +30643,9 @@ var enumProcessor = (schema, _ctx, json2, _params) => {
     json2.not = {};
     return;
   }
-  if (values.every((v) => typeof v === "number"))
+  if (values.every((v2) => typeof v2 === "number"))
     json2.type = "number";
-  if (values.every((v) => typeof v === "string"))
+  if (values.every((v2) => typeof v2 === "string"))
     json2.type = "string";
   json2.enum = values;
 };
@@ -30678,13 +30678,13 @@ var literalProcessor = (schema, ctx, json2, params) => {
       json2.const = val;
     }
   } else {
-    if (vals.every((v) => typeof v === "number"))
+    if (vals.every((v2) => typeof v2 === "number"))
       json2.type = "number";
-    if (vals.every((v) => typeof v === "string"))
+    if (vals.every((v2) => typeof v2 === "string"))
       json2.type = "string";
-    if (vals.every((v) => typeof v === "boolean"))
+    if (vals.every((v2) => typeof v2 === "boolean"))
       json2.type = "boolean";
-    if (vals.every((v) => v === null))
+    if (vals.every((v2) => v2 === null))
       json2.type = "null";
     json2.enum = vals;
   }
@@ -30916,11 +30916,11 @@ function stringifyKeyNames(bySchema, json2, visited) {
   const types = Array.isArray(json2.type) ? json2.type : [json2.type];
   const numericType = !types.includes("string") && types.some((t) => t === "number" || t === "integer");
   const values = json2.enum ?? (json2.const !== void 0 ? [json2.const] : void 0);
-  if (!numericType && !values?.some((v) => typeof v === "number"))
+  if (!numericType && !values?.some((v2) => typeof v2 === "number"))
     return json2;
   const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, format, id, ...rest } = json2;
   if (rest.enum)
-    rest.enum = rest.enum.map((v) => typeof v === "number" ? String(v) : v);
+    rest.enum = rest.enum.map((v2) => typeof v2 === "number" ? String(v2) : v2);
   else if (typeof rest.const === "number")
     rest.const = String(rest.const);
   if (!numericType)
@@ -30994,7 +30994,7 @@ var recordProcessor = (schema, ctx, _json, params) => {
   const keyValues = keyType._zod.values;
   const omittableOnInput = ctx.io === "input" && inputOptin(def.valueType) !== void 0;
   if (keyValues && !def.partial && !omittableOnInput) {
-    const validKeyValues = [...keyValues].filter((v) => typeof v === "string" || typeof v === "number");
+    const validKeyValues = [...keyValues].filter((v2) => typeof v2 === "string" || typeof v2 === "number");
     if (validKeyValues.length > 0) {
       json2.required = validKeyValues.map(String);
     }
@@ -31541,7 +31541,7 @@ function normalizeObjectSchema(schema) {
     const asV4 = schema;
     if (!asV3._def && !asV4._zod) {
       const values = Object.values(schema);
-      if (values.length > 0 && values.every((v) => typeof v === "object" && v !== null && (v._def !== void 0 || v._zod !== void 0 || typeof v.parse === "function"))) {
+      if (values.length > 0 && values.every((v2) => typeof v2 === "object" && v2 !== null && (v2._def !== void 0 || v2._zod !== void 0 || typeof v2.parse === "function"))) {
         return objectFromShape(schema);
       }
     }
@@ -33263,7 +33263,7 @@ var ZodEnum2 = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   };
 });
 function _enum2(values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v2) => [v2, v2])) : values;
   return new ZodEnum2({
     type: "enum",
     entries,
@@ -34047,10 +34047,10 @@ function convertBaseSchema(schema, ctx) {
     if (enumValues.length === 1) {
       return z.literal(enumValues[0]);
     }
-    if (enumValues.every((v) => typeof v === "string")) {
+    if (enumValues.every((v2) => typeof v2 === "string")) {
       return z.enum(enumValues);
     }
-    const literalSchemas = enumValues.map((v) => z.literal(v));
+    const literalSchemas = enumValues.map((v2) => z.literal(v2));
     if (literalSchemas.length < 2) {
       return literalSchemas[0];
     }
@@ -34496,7 +34496,7 @@ var LATEST_PROTOCOL_VERSION = "2025-11-25";
 var SUPPORTED_PROTOCOL_VERSIONS = [LATEST_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 var RELATED_TASK_META_KEY = "io.modelcontextprotocol/related-task";
 var JSONRPC_VERSION = "2.0";
-var AssertObjectSchema = custom((v) => v !== null && (typeof v === "object" || typeof v === "function"));
+var AssertObjectSchema = custom((v2) => v2 !== null && (typeof v2 === "object" || typeof v2 === "function"));
 var ProgressTokenSchema = union([string2(), number2().int()]);
 var CursorSchema = string2();
 var TaskCreationParamsSchema = looseObject({
@@ -39120,7 +39120,7 @@ var UriTemplate = class _UriTemplate {
         const value2 = variables[name];
         if (value2 === void 0)
           return "";
-        const encoded2 = Array.isArray(value2) ? value2.map((v) => this.encodeValue(v, part.operator)).join(",") : this.encodeValue(value2.toString(), part.operator);
+        const encoded2 = Array.isArray(value2) ? value2.map((v2) => this.encodeValue(v2, part.operator)).join(",") : this.encodeValue(value2.toString(), part.operator);
         return `${name}=${encoded2}`;
       }).filter((pair) => pair.length > 0);
       if (pairs.length === 0)
@@ -39129,16 +39129,16 @@ var UriTemplate = class _UriTemplate {
       return separator + pairs.join("&");
     }
     if (part.names.length > 1) {
-      const values2 = part.names.map((name) => variables[name]).filter((v) => v !== void 0);
+      const values2 = part.names.map((name) => variables[name]).filter((v2) => v2 !== void 0);
       if (values2.length === 0)
         return "";
-      return values2.map((v) => Array.isArray(v) ? v[0] : v).join(",");
+      return values2.map((v2) => Array.isArray(v2) ? v2[0] : v2).join(",");
     }
     const value = variables[part.name];
     if (value === void 0)
       return "";
     const values = Array.isArray(value) ? value : [value];
-    const encoded = values.map((v) => this.encodeValue(v, part.operator));
+    const encoded = values.map((v2) => this.encodeValue(v2, part.operator));
     switch (part.operator) {
       case "":
         return encoded.join(",");
@@ -39873,7 +39873,7 @@ var McpServer = class {
     };
     this._registeredResourceTemplates[name] = registeredResourceTemplate;
     const variableNames = template.uriTemplate.variableNames;
-    const hasCompleter = Array.isArray(variableNames) && variableNames.some((v) => !!template.completeCallback(v));
+    const hasCompleter = Array.isArray(variableNames) && variableNames.some((v2) => !!template.completeCallback(v2));
     if (hasCompleter) {
       this.setCompletionRequestHandler();
     }
@@ -39990,7 +39990,7 @@ var McpServer = class {
           annotations = rest.shift();
         }
       } else if (typeof firstArg === "object" && firstArg !== null) {
-        if (Object.values(firstArg).some((v) => typeof v === "object" && v !== null)) {
+        if (Object.values(firstArg).some((v2) => typeof v2 === "object" && v2 !== null)) {
           throw new Error(`Tool ${name} expected a Zod schema or ToolAnnotations, but received an unrecognized object`);
         }
         annotations = rest.shift();
@@ -40369,9 +40369,10 @@ function checkProject(root, stacks) {
   return out;
 }
 
-// src/language.ts
+// src/gitdiff.ts
+import { execFileSync } from "node:child_process";
 import { existsSync as existsSync2, readFileSync as readFileSync4, statSync as statSync3 } from "node:fs";
-import { basename, dirname as dirname2, extname as extname2, join as join4, relative as relative3, resolve as resolve2 } from "node:path";
+import { join as join4 } from "node:path";
 
 // src/references.ts
 import { readdirSync as readdirSync3, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
@@ -40503,17 +40504,81 @@ function checkReferences(input2) {
   }
   return [...findings, ...propagation(findings)];
 }
-function formatFindings(findings) {
-  if (!findings.length) return "Nenhuma refer\xEAncia suspeita encontrada.";
+function checkReferencesFiles(files) {
+  const findings = [];
+  for (const [file2, lines] of files) findings.push(...scanLines(file2, lines, extname(file2)));
+  return [...findings, ...propagation(findings)];
+}
+function formatFindings(findings, opts = {}) {
+  if (!findings.length) return opts.empty ?? "Nenhuma refer\xEAncia suspeita encontrada.";
+  const limit = opts.limit ?? 200;
   const errors = findings.filter((f) => f.severity === "error").length;
-  const rows = findings.map((f) => `${f.severity.toUpperCase().padEnd(5)} ${f.rule}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.message}${f.snippet ? `
+  const byRule = /* @__PURE__ */ new Map();
+  for (const f of findings) byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
+  const summary = [...byRule].sort((a, b) => b[1] - a[1]).map(([rule, n]) => `${rule} \xD7${n}`).join(", ");
+  const ordered = [...findings].sort((a, b) => Number(b.severity === "error") - Number(a.severity === "error"));
+  const rows = ordered.slice(0, limit).map((f) => `${f.severity.toUpperCase().padEnd(5)} ${f.rule}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.message}${f.snippet ? `
         > ${f.snippet}` : ""}`);
-  return `${errors} erro(s), ${findings.length - errors} alerta(s)
+  const cut = findings.length > limit ? `
 
-${rows.join("\n")}`;
+\u2026 ${findings.length - limit} achado(s) omitido(s) (limit=${limit}).` : "";
+  return `${errors} erro(s), ${findings.length - errors} alerta(s)
+Por regra: ${summary}
+
+${rows.join("\n")}${cut}`;
+}
+
+// src/gitdiff.ts
+var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+var SAFE_REF = /^[\w][\w./~^@{}-]*$/;
+var MAX_FILE = 256 * 1024;
+var MAX_UNTRACKED = 200;
+function collectChanges(cwd, base = "HEAD") {
+  if (!SAFE_REF.test(base)) throw new Error(`ref git inv\xE1lida: ${base}`);
+  let gitRoot;
+  try {
+    gitRoot = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
+  } catch {
+    return null;
+  }
+  let diff = "";
+  let changed = [];
+  try {
+    diff = git(gitRoot, ["diff", base, "--unified=0", "--"]);
+    changed = git(gitRoot, ["diff", base, "--name-only", "--"]).split(/\r?\n/).filter(Boolean);
+  } catch {
+    try {
+      diff = git(gitRoot, ["diff", "--unified=0", "--"]);
+      changed = git(gitRoot, ["diff", "--name-only", "--"]).split(/\r?\n/).filter(Boolean);
+    } catch {
+    }
+  }
+  const untracked = git(gitRoot, ["ls-files", "--others", "--exclude-standard", "--full-name"]).split(/\r?\n/).filter(Boolean);
+  const added = parseDiff(diff);
+  for (const file2 of untracked.slice(0, MAX_UNTRACKED)) {
+    const abs = join4(gitRoot, file2);
+    if (!existsSync2(abs) || !statSync3(abs).isFile() || statSync3(abs).size > MAX_FILE) continue;
+    added.set(file2, readFileSync4(abs, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 })));
+  }
+  return { gitRoot, added, files: [.../* @__PURE__ */ new Set([...changed, ...untracked])] };
+}
+function commitsSince(cwd, base) {
+  if (!SAFE_REF.test(base)) throw new Error(`ref git inv\xE1lida: ${base}`);
+  try {
+    const gitRoot = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
+    const raw = git(gitRoot, ["log", `${base}..HEAD`, "--format=%H%x1f%B%x1e"]);
+    return raw.split("").map((r) => r.replace(/^\s+/, "")).filter(Boolean).map((r) => {
+      const [sha, ...rest] = r.split("");
+      return { sha: sha.trim(), message: rest.join("").trim() };
+    });
+  } catch {
+    return null;
+  }
 }
 
 // src/language.ts
+import { existsSync as existsSync3, readFileSync as readFileSync5, statSync as statSync4 } from "node:fs";
+import { basename, dirname as dirname2, extname as extname2, join as join5, relative as relative3, resolve as resolve2 } from "node:path";
 function parseVocabulary(md) {
   const out = [];
   for (const line of md.split(/\r?\n/)) {
@@ -40543,10 +40608,10 @@ function parseDomainGlossary(md) {
   return out;
 }
 function findUp(start, rel) {
-  let dir = statSync3(start).isFile() ? dirname2(start) : start;
+  let dir = statSync4(start).isFile() ? dirname2(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join4(dir, rel);
-    if (existsSync2(candidate)) return candidate;
+    const candidate = join5(dir, rel);
+    if (existsSync3(candidate)) return candidate;
     const parent = dirname2(dir);
     if (parent === dir) break;
     dir = parent;
@@ -40556,18 +40621,18 @@ function findUp(start, rel) {
 function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
   const put = (list) => list.forEach((e) => merged.set(e.term, e));
-  const base = join4(standardsDir, "all", "vocabulary.md");
-  if (existsSync2(base)) put(parseVocabulary(readFileSync4(base, "utf8")));
+  const base = join5(standardsDir, "all", "vocabulary.md");
+  if (existsSync3(base)) put(parseVocabulary(readFileSync5(base, "utf8")));
   const sources = [];
-  if (projectStart && existsSync2(projectStart)) {
+  if (projectStart && existsSync3(projectStart)) {
     const domain2 = findUp(projectStart, "GLOSSARY.md");
     if (domain2) {
-      put(parseDomainGlossary(readFileSync4(domain2, "utf8")));
+      put(parseDomainGlossary(readFileSync5(domain2, "utf8")));
       sources.push(domain2);
     }
-    const project = findUp(projectStart, join4("docs", "glossary.md"));
+    const project = findUp(projectStart, join5("docs", "glossary.md"));
     if (project) {
-      put(parseVocabulary(readFileSync4(project, "utf8")));
+      put(parseVocabulary(readFileSync5(project, "utf8")));
       sources.push(project);
     }
   }
@@ -40628,20 +40693,45 @@ function createLanguageScanner(projectStart) {
   };
 }
 function checkLanguage(input2) {
-  const scanner = createLanguageScanner(input2.root ?? input2.path);
+  const scanner = createLanguageScanner(input2.root ?? input2.repo ?? input2.path);
   const findings = [];
-  if (input2.diff) {
+  if (input2.repo) {
+    const changes = collectChanges(resolve2(input2.repo), input2.base);
+    if (changes) for (const [file2, lines] of changes.added) findings.push(...scanner.scan(file2, lines));
+  } else if (input2.diff) {
     for (const [f, lines] of parseDiff(input2.diff)) findings.push(...scanner.scan(f, lines));
   } else if (input2.path) {
     const root = resolve2(input2.path);
-    const isFile = statSync3(root).isFile();
+    const isFile = statSync4(root).isFile();
     for (const file2 of walk2(root)) {
-      if (!scanner.supported(file2) || statSync3(file2).size > MAX_FILE_BYTES) continue;
-      const lines = readFileSync4(file2, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 }));
+      if (!scanner.supported(file2) || statSync4(file2).size > MAX_FILE_BYTES) continue;
+      const lines = readFileSync5(file2, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 }));
       findings.push(...scanner.scan(isFile ? file2 : relative3(root, file2), lines));
     }
   }
   return { findings, projectGlossary: scanner.projectGlossary };
+}
+
+// src/hooks/policy.ts
+var v = (rule, level, message) => ({ rule, level, message });
+var CC = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)\s]+\))?!?: \S/;
+var CC_PREFIX = /^[a-z]+(\([^)]*\))?!?:\s*/;
+var SKIP_SUBJECT = /^(Merge|Revert|fixup!|squash!|amend!)\b/;
+var EN_VERB = /^(add|adds|added|fix|fixes|fixed|update|updates|updated|implement|implements|create|creates|change|changes|improve|improves|support|supports|make|makes|allow|allows|handle|handles|rename|renames|bump|enable|enables|replace|replaces|prevent|prevents|ensure|ensures|initial)\b/i;
+function evaluateCommitMessage(message, root) {
+  const out = [];
+  const lines = message.split(/\r?\n/);
+  const subject = lines.find((l) => l.trim()) ?? "";
+  if (SKIP_SUBJECT.test(subject)) return out;
+  if (!CC.test(subject))
+    out.push(v("COMMIT-001", "deny", `A mensagem de commit "${subject.slice(0, 60)}" n\xE3o segue Conventional Commits: "tipo(escopo): descri\xE7\xE3o em pt-BR", ex.: "fix: corrige o total da venda".`));
+  if (subject.length > 72) out.push(v("COMMIT-003", "warn", `Primeira linha do commit com ${subject.length} caracteres (m\xE1x. 72).`));
+  if (EN_VERB.test(subject.replace(CC_PREFIX, "")))
+    out.push(v("COMMIT-002", "warn", "A descri\xE7\xE3o do commit parece estar em ingl\xEAs; use pt-BR (o tipo feat/fix permanece em ingl\xEAs)."));
+  const scanner = createLanguageScanner(root);
+  for (const f of scanner.scan("COMMIT_EDITMSG.md", lines.map((text2, i) => ({ n: i + 1, text: text2 }))))
+    out.push(v(f.rule, "warn", `mensagem de commit, linha ${f.line}: ${f.message}`));
+  return out;
 }
 
 // src/index.ts
@@ -40652,7 +40742,7 @@ var render = (d) => `# ${d.title}  \`${d.id}\` (${d.kind})
 
 ${d.body}`;
 var phaseArg = external_exports.enum(["plan", "implement", "review"]);
-var join5 = (docs) => docs.map(render).join("\n\n---\n\n");
+var join6 = (docs) => docs.map(render).join("\n\n---\n\n");
 var stacksArg = external_exports.array(external_exports.string()).describe('Ex.: ["web","devops"]. "all" \xE9 sempre inclu\xEDdo.');
 server.registerTool(
   "list_standards",
@@ -40680,40 +40770,74 @@ server.registerTool(
     inputSchema: { stacks: stacksArg, phase: phaseArg.optional() }
   },
   async ({ stacks, phase }) => text(
-    join5(forStacks(catalog(), stacks, phase).filter((d) => d.kind === "guardrail" || d.kind === "glossary")) || "Sem guardrails."
+    join6(forStacks(catalog(), stacks, phase).filter((d) => d.kind === "guardrail" || d.kind === "glossary")) || "Sem guardrails."
   )
 );
+var sourceArgs = {
+  path: external_exports.string().optional().describe("Arquivo ou diret\xF3rio (auditoria do que j\xE1 existe)"),
+  diff: external_exports.string().optional().describe("Sa\xEDda de `git diff` (unified); s\xF3 as linhas adicionadas contam"),
+  repo: external_exports.string().optional().describe("Reposit\xF3rio git: avalia as mudan\xE7as desde `base` (commits + working tree + arquivos novos). Sem colar diff"),
+  base: external_exports.string().optional().describe("Com `repo`: ref de compara\xE7\xE3o (default HEAD; ex.: main, origin/main, HEAD~3)"),
+  limit: external_exports.number().int().positive().optional().describe("M\xE1ximo de achados listados (default 200); o resumo por regra \xE9 sempre completo")
+};
+var oneSource = ({ path, diff, repo }) => [path, diff, repo].filter(Boolean).length === 1;
+var ONE = "Informe exatamente um entre `path`, `diff` e `repo`.";
 server.registerTool(
   "check_references",
   {
-    description: "Escaneia coment\xE1rios e nomes de teste atr\xE1s de refer\xEAncias indevidas (issue, PR, ticket, conversa, URL, TODO com ref) e refer\xEAncias a ADR/spec que exigem justificativa (DOC-003..006, DOC-010). Informe `diff` (s\xF3 linhas adicionadas) OU `path`.",
-    inputSchema: {
-      path: external_exports.string().optional().describe("Arquivo ou diret\xF3rio"),
-      diff: external_exports.string().optional().describe("Sa\xEDda de `git diff` (unified)")
-    }
+    description: "Escaneia coment\xE1rios e nomes de teste atr\xE1s de refer\xEAncias indevidas (issue, PR, ticket, conversa, URL, TODO com ref) e refer\xEAncias a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudan\xE7as.",
+    inputSchema: sourceArgs
   },
-  async ({ path, diff }) => {
-    if (!path === !diff) return { ...text("Informe exatamente um entre `path` e `diff`."), isError: true };
-    return text(formatFindings(checkReferences({ path: path ? resolve3(path) : void 0, diff })));
+  async (args) => {
+    if (!oneSource(args)) return { ...text(ONE), isError: true };
+    const { path, diff, repo, base, limit } = args;
+    if (repo) {
+      const changes = collectChanges(resolve3(repo), base);
+      if (!changes) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
+      return text(formatFindings(checkReferencesFiles(changes.added), { limit }));
+    }
+    return text(formatFindings(checkReferences({ path: path ? resolve3(path) : void 0, diff }), { limit }));
   }
 );
 server.registerTool(
   "check_language",
   {
-    description: "Escaneia coment\xE1rios, nomes de teste e .md atr\xE1s de tradu\xE7\xE3o literal de vocabul\xE1rio t\xE9cnico (LANG-002) e texto em ingl\xEAs (LANG-001). Usa o vocabul\xE1rio-base + docs/glossary.md do projeto (procurado a partir de `root` ou `path`). Informe `diff` OU `path`.",
-    inputSchema: {
-      path: external_exports.string().optional().describe("Arquivo ou diret\xF3rio"),
-      diff: external_exports.string().optional().describe("Sa\xEDda de `git diff` (unified)"),
-      root: external_exports.string().optional().describe("Raiz do projeto, para achar docs/glossary.md (necess\xE1rio quando s\xF3 h\xE1 `diff`)")
-    }
+    description: "Escaneia coment\xE1rios, nomes de teste e .md atr\xE1s de tradu\xE7\xE3o literal de vocabul\xE1rio t\xE9cnico (LANG-002) e texto em ingl\xEAs (LANG-001). Usa o vocabul\xE1rio-base, o GLOSSARY.md de dom\xEDnio (_Avoid_) e o docs/glossary.md do projeto. Informe `path` (auditoria), `diff` OU `repo` (+`base`).",
+    inputSchema: { ...sourceArgs, root: external_exports.string().optional().describe("Raiz do projeto, para achar os gloss\xE1rios (necess\xE1rio s\xF3 com `diff`)") }
   },
-  async ({ path, diff, root }) => {
-    if (!path === !diff) return { ...text("Informe exatamente um entre `path` e `diff`."), isError: true };
-    const { findings, projectGlossary } = checkLanguage({ path, diff, root });
-    const head = `gloss\xE1rio do projeto: ${projectGlossary ?? "nenhum (usando s\xF3 o vocabul\xE1rio-base)"}
+  async (args) => {
+    if (!oneSource(args)) return { ...text(ONE), isError: true };
+    const { path, diff, repo, base, root, limit } = args;
+    if (repo && !collectChanges(resolve3(repo), base)) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
+    const { findings, projectGlossary } = checkLanguage({ path, diff, root, repo, base });
+    const head = `gloss\xE1rios: ${projectGlossary ?? "nenhum (usando s\xF3 o vocabul\xE1rio-base)"}
 
 `;
-    return text(head + (findings.length ? formatFindings(findings) : "Nenhum problema de idioma encontrado."));
+    return text(head + formatFindings(findings, { limit, empty: "Nenhum problema de idioma encontrado." }));
+  }
+);
+server.registerTool(
+  "check_commits",
+  {
+    description: "Avalia as mensagens dos commits em `base..HEAD` contra COMMIT-001..003 (Conventional Commits, pt-BR, 72 caracteres) e o idioma (LANG-001/002).",
+    inputSchema: {
+      repo: external_exports.string().describe("Reposit\xF3rio git"),
+      base: external_exports.string().optional().describe("Ref de compara\xE7\xE3o (default HEAD~1); avalia os commits de base..HEAD")
+    }
+  },
+  async ({ repo, base }) => {
+    const commits = commitsSince(resolve3(repo), base ?? "HEAD~1");
+    if (!commits) return { ...text(`N\xE3o foi poss\xEDvel listar commits de "${base ?? "HEAD~1"}..HEAD" em "${repo}" (n\xE3o \xE9 um reposit\xF3rio git, ou a base n\xE3o existe).`), isError: true };
+    if (!commits.length) return text("Nenhum commit na faixa.");
+    const rows = commits.flatMap((c) => {
+      const vs = evaluateCommitMessage(c.message, resolve3(repo));
+      const subject = c.message.split(/\r?\n/)[0];
+      return vs.length ? [`${c.sha.slice(0, 7)} "${subject}"`, ...vs.map((x) => `  ${x.level === "deny" ? "ERRO " : "ALERTA"} ${x.rule}  ${x.message}`)] : [];
+    });
+    const bad = commits.filter((c) => evaluateCommitMessage(c.message, resolve3(repo)).length).length;
+    return text(`${commits.length} commit(s) avaliados, ${bad} com problemas.${rows.length ? `
+
+${rows.join("\n")}` : ""}`);
   }
 );
 server.registerTool(
@@ -40757,7 +40881,7 @@ server.registerPrompt(
   },
   ({ task, stacks, phase }) => {
     const docs = forStacks(catalog(), stacks.split(",").map((s) => s.trim()).filter(Boolean), phase ?? "implement");
-    const body = join5(docs);
+    const body = join6(docs);
     return {
       messages: [
         {
@@ -40788,7 +40912,7 @@ server.registerPrompt(
             type: "text",
             text: `Revise as mudan\xE7as atuais contra os padr\xF5es abaixo. Liste viola\xE7\xF5es com id da regra, arquivo:linha e corre\xE7\xE3o sugerida.
 
-${join5(docs)}`
+${join6(docs)}`
           }
         }
       ]

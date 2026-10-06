@@ -3533,11 +3533,10 @@ var require_gray_matter = __commonJS({
 });
 
 // src/hook.ts
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync as existsSync3, readFileSync as readFileSync3, statSync as statSync2, writeFileSync } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync4, statSync as statSync3, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join as join4, resolve as resolve4 } from "node:path";
+import { isAbsolute, join as join5, resolve as resolve4 } from "node:path";
 
 // src/hooks/config.ts
 import { existsSync, readFileSync } from "node:fs";
@@ -3575,8 +3574,8 @@ function loadProjectConfig(start) {
 import { basename as basename2, extname as extname2 } from "node:path";
 
 // src/language.ts
-import { existsSync as existsSync2, readFileSync as readFileSync2, statSync } from "node:fs";
-import { basename, dirname as dirname3, extname, join as join3, relative as relative2, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+import { basename, dirname as dirname3, extname, join as join4, relative as relative2, resolve as resolve3 } from "node:path";
 
 // src/catalog.ts
 var import_gray_matter = __toESM(require_gray_matter(), 1);
@@ -3586,6 +3585,11 @@ var here = dirname2(fileURLToPath(import.meta.url));
 var standardsDir = resolve2(
   process.env.DS_MCP_STANDARDS_DIR ?? join2(here, "..", "standards")
 );
+
+// src/gitdiff.ts
+import { execFileSync } from "node:child_process";
+import { existsSync as existsSync2, readFileSync as readFileSync2, statSync } from "node:fs";
+import { join as join3 } from "node:path";
 
 // src/references.ts
 var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
@@ -3675,6 +3679,41 @@ function parseDiff(diff) {
   return byFile;
 }
 
+// src/gitdiff.ts
+var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+var SAFE_REF = /^[\w][\w./~^@{}-]*$/;
+var MAX_FILE = 256 * 1024;
+var MAX_UNTRACKED = 200;
+function collectChanges(cwd, base = "HEAD") {
+  if (!SAFE_REF.test(base)) throw new Error(`ref git inv\xE1lida: ${base}`);
+  let gitRoot;
+  try {
+    gitRoot = git(cwd, ["rev-parse", "--show-toplevel"]).trim();
+  } catch {
+    return null;
+  }
+  let diff = "";
+  let changed = [];
+  try {
+    diff = git(gitRoot, ["diff", base, "--unified=0", "--"]);
+    changed = git(gitRoot, ["diff", base, "--name-only", "--"]).split(/\r?\n/).filter(Boolean);
+  } catch {
+    try {
+      diff = git(gitRoot, ["diff", "--unified=0", "--"]);
+      changed = git(gitRoot, ["diff", "--name-only", "--"]).split(/\r?\n/).filter(Boolean);
+    } catch {
+    }
+  }
+  const untracked = git(gitRoot, ["ls-files", "--others", "--exclude-standard", "--full-name"]).split(/\r?\n/).filter(Boolean);
+  const added = parseDiff(diff);
+  for (const file of untracked.slice(0, MAX_UNTRACKED)) {
+    const abs = join3(gitRoot, file);
+    if (!existsSync2(abs) || !statSync(abs).isFile() || statSync(abs).size > MAX_FILE) continue;
+    added.set(file, readFileSync2(abs, "utf8").split(/\r?\n/).map((text, i) => ({ n: i + 1, text })));
+  }
+  return { gitRoot, added, files: [.../* @__PURE__ */ new Set([...changed, ...untracked])] };
+}
+
 // src/language.ts
 function parseVocabulary(md) {
   const out = [];
@@ -3705,10 +3744,10 @@ function parseDomainGlossary(md) {
   return out;
 }
 function findUp(start, rel) {
-  let dir = statSync(start).isFile() ? dirname3(start) : start;
+  let dir = statSync2(start).isFile() ? dirname3(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join3(dir, rel);
-    if (existsSync2(candidate)) return candidate;
+    const candidate = join4(dir, rel);
+    if (existsSync3(candidate)) return candidate;
     const parent = dirname3(dir);
     if (parent === dir) break;
     dir = parent;
@@ -3718,18 +3757,18 @@ function findUp(start, rel) {
 function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
   const put = (list) => list.forEach((e) => merged.set(e.term, e));
-  const base = join3(standardsDir, "all", "vocabulary.md");
-  if (existsSync2(base)) put(parseVocabulary(readFileSync2(base, "utf8")));
+  const base = join4(standardsDir, "all", "vocabulary.md");
+  if (existsSync3(base)) put(parseVocabulary(readFileSync3(base, "utf8")));
   const sources = [];
-  if (projectStart && existsSync2(projectStart)) {
+  if (projectStart && existsSync3(projectStart)) {
     const domain = findUp(projectStart, "GLOSSARY.md");
     if (domain) {
-      put(parseDomainGlossary(readFileSync2(domain, "utf8")));
+      put(parseDomainGlossary(readFileSync3(domain, "utf8")));
       sources.push(domain);
     }
-    const project = findUp(projectStart, join3("docs", "glossary.md"));
+    const project = findUp(projectStart, join4("docs", "glossary.md"));
     if (project) {
-      put(parseVocabulary(readFileSync2(project, "utf8")));
+      put(parseVocabulary(readFileSync3(project, "utf8")));
       sources.push(project);
     }
   }
@@ -3790,6 +3829,81 @@ function createLanguageScanner(projectStart) {
   };
 }
 
+// src/hooks/commit.ts
+var HEREDOC = /\$\(\s*cat\s*<<-?\s*(['"]?)(\w+)\1[ \t]*\n([\s\S]*?)\n[ \t]*\2[ \t]*\n?[ \t]*\)/g;
+function tokenize(cmd) {
+  const out = [];
+  let cur = "";
+  let open = false;
+  const flush = () => {
+    if (open || cur) out.push(cur);
+    cur = "";
+    open = false;
+  };
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (c === "'") {
+      const j = cmd.indexOf("'", i + 1);
+      const end = j < 0 ? cmd.length : j;
+      cur += cmd.slice(i + 1, end);
+      open = true;
+      i = end;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (j < cmd.length && cmd[j] !== '"') {
+        if (cmd[j] === "\\" && j + 1 < cmd.length) j++;
+        cur += cmd[j];
+        j++;
+      }
+      open = true;
+      i = j;
+    } else if (/\s/.test(c)) {
+      flush();
+    } else if (c === "&" || c === "|" || c === ";") {
+      flush();
+      let op = c;
+      if ((c === "&" || c === "|") && cmd[i + 1] === c) {
+        op = c + c;
+        i++;
+      }
+      out.push(op);
+    } else {
+      cur += c;
+    }
+  }
+  flush();
+  return out;
+}
+var SEPARATORS = /* @__PURE__ */ new Set(["&&", "||", ";", "|", "&"]);
+function parseCommits(command) {
+  const bodies = [];
+  const simplified = command.replace(HEREDOC, (_m, _q, _id, body) => {
+    bodies.push(body);
+    return `"__HEREDOC_${bodies.length - 1}__"`;
+  });
+  const restore = (t) => t.replace(/__HEREDOC_(\d+)__/g, (_m, n) => bodies[Number(n)] ?? "");
+  const tokens = tokenize(simplified);
+  const commits = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] !== "git") continue;
+    let j = i + 1;
+    while (j < tokens.length && tokens[j].startsWith("-")) j += tokens[j] === "-C" || tokens[j] === "-c" ? 2 : 1;
+    if (tokens[j] !== "commit") continue;
+    const messages = [];
+    for (let k = j + 1; k < tokens.length && !SEPARATORS.has(tokens[k]); k++) {
+      const t = tokens[k];
+      if (/^-[a-zA-Z]*m$/.test(t) || t === "--message") {
+        if (k + 1 < tokens.length) messages.push(restore(tokens[++k]));
+      } else if (t.startsWith("--message=")) {
+        messages.push(restore(t.slice("--message=".length)));
+      }
+    }
+    commits.push({ messages });
+    i = j;
+  }
+  return commits;
+}
+
 // src/hooks/policy.ts
 var v = (rule, level, message) => ({ rule, level, message });
 var ENV_FILE = /(^|[\\/])\.env(\.[\w-]+)*$/i;
@@ -3821,7 +3935,29 @@ function installsPackage(segment) {
   if (t[0] === "go" && t[1] === "get") return true;
   return false;
 }
-function evaluateBash(command) {
+var CC = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)\s]+\))?!?: \S/;
+var CC_PREFIX = /^[a-z]+(\([^)]*\))?!?:\s*/;
+var SKIP_SUBJECT = /^(Merge|Revert|fixup!|squash!|amend!)\b/;
+var EN_VERB = /^(add|adds|added|fix|fixes|fixed|update|updates|updated|implement|implements|create|creates|change|changes|improve|improves|support|supports|make|makes|allow|allows|handle|handles|rename|renames|bump|enable|enables|replace|replaces|prevent|prevents|ensure|ensures|initial)\b/i;
+function evaluateCommitMessage(message, root) {
+  const out = [];
+  const lines = message.split(/\r?\n/);
+  const subject = lines.find((l) => l.trim()) ?? "";
+  if (SKIP_SUBJECT.test(subject)) return out;
+  if (!CC.test(subject))
+    out.push(v("COMMIT-001", "deny", `A mensagem de commit "${subject.slice(0, 60)}" n\xE3o segue Conventional Commits: "tipo(escopo): descri\xE7\xE3o em pt-BR", ex.: "fix: corrige o total da venda".`));
+  if (subject.length > 72) out.push(v("COMMIT-003", "warn", `Primeira linha do commit com ${subject.length} caracteres (m\xE1x. 72).`));
+  if (EN_VERB.test(subject.replace(CC_PREFIX, "")))
+    out.push(v("COMMIT-002", "warn", "A descri\xE7\xE3o do commit parece estar em ingl\xEAs; use pt-BR (o tipo feat/fix permanece em ingl\xEAs)."));
+  const scanner = createLanguageScanner(root);
+  for (const f of scanner.scan("COMMIT_EDITMSG.md", lines.map((text, i) => ({ n: i + 1, text }))))
+    out.push(v(f.rule, "warn", `mensagem de commit, linha ${f.line}: ${f.message}`));
+  return out;
+}
+function evaluateCommit(command, root) {
+  return parseCommits(command).filter((c) => c.messages.length > 0).flatMap((c) => evaluateCommitMessage(c.messages.join("\n\n"), root));
+}
+function evaluateBash(command, root) {
   const out = [];
   if (!/\.gitignore\b/.test(command)) {
     for (const m of command.matchAll(SENSITIVE_TOKEN)) {
@@ -3848,6 +3984,7 @@ function evaluateBash(command) {
         break;
       }
   }
+  out.push(...evaluateCommit(command, root));
   return out;
 }
 function addedLines(before, after) {
@@ -3930,7 +4067,7 @@ function evaluateAddedLines(path, added, root) {
 
 // src/hook.ts
 var MAX_READ = 1024 * 1024;
-var readText = (p) => existsSync3(p) && statSync2(p).isFile() && statSync2(p).size <= MAX_READ ? readFileSync3(p, "utf8") : "";
+var readText = (p) => existsSync4(p) && statSync3(p).isFile() && statSync3(p).size <= MAX_READ ? readFileSync4(p, "utf8") : "";
 var fmt = (vs) => vs.map((x) => `- [${x.rule}] ${x.message}`).join("\n");
 var emit = (o) => process.stdout.write(JSON.stringify(o));
 var pre = (extra) => emit({ hookSpecificOutput: { hookEventName: "PreToolUse", ...extra } });
@@ -3943,7 +4080,7 @@ function evaluateTool(input, cwd, root) {
   const abs = (p) => isAbsolute(p) ? p : resolve4(cwd, p);
   switch (input.tool_name) {
     case "Bash":
-      return evaluateBash(String(ti.command ?? ""));
+      return evaluateBash(String(ti.command ?? ""), root);
     case "Read":
       return evaluateRead(String(ti.file_path ?? ""));
     case "Grep": {
@@ -3980,11 +4117,10 @@ ${fmt([...ask, ...warn])}` });
   if (warn.length) return pre({ additionalContext: `ds-mcp (avisos, n\xE3o bloqueiam; corrija se couber no escopo):
 ${fmt(warn)}` });
 }
-var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-var stateFile = (kind, sid) => join4(tmpdir(), `ds-mcp-${kind}-${String(sid ?? "x").replace(/\W/g, "")}.json`);
+var stateFile = (kind, sid) => join5(tmpdir(), `ds-mcp-${kind}-${String(sid ?? "x").replace(/\W/g, "")}.json`);
 function recordBase(input, cwd) {
   const file = stateFile("base", input.session_id);
-  if (existsSync3(file)) return;
+  if (existsSync4(file)) return;
   try {
     writeFileSync(file, JSON.stringify({ head: git(cwd, ["rev-parse", "HEAD"]).trim() }));
   } catch {
@@ -3992,7 +4128,7 @@ function recordBase(input, cwd) {
 }
 function sessionBase(input, cwd) {
   try {
-    const head = JSON.parse(readFileSync3(stateFile("base", input.session_id), "utf8")).head;
+    const head = JSON.parse(readFileSync4(stateFile("base", input.session_id), "utf8")).head;
     if (typeof head === "string" && /^[0-9a-f]{7,40}$/.test(head)) {
       git(cwd, ["cat-file", "-e", `${head}^{commit}`]);
       return head;
@@ -4002,29 +4138,17 @@ function sessionBase(input, cwd) {
   return "HEAD";
 }
 function stopGate(input, cfg, cwd) {
-  let diff = "";
-  let untracked = [];
-  let changed = [];
+  let changes;
   try {
-    const base = sessionBase(input, cwd);
-    try {
-      diff = git(cwd, ["diff", base, "--unified=0"]);
-    } catch {
-      diff = git(cwd, ["diff", "--unified=0"]);
-    }
-    untracked = git(cwd, ["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
-    changed = git(cwd, ["diff", base, "--name-only"]).split(/\r?\n/).filter(Boolean);
+    changes = collectChanges(cwd, sessionBase(input, cwd));
   } catch {
     return;
   }
+  if (!changes) return;
   const root = cfg.root ?? cwd;
   const found = [];
-  for (const [file, lines] of parseDiff(diff)) found.push(...evaluateAddedLines(join4(root, file), lines, root));
-  for (const file of untracked.slice(0, 50)) {
-    const text = readText(join4(cwd, file));
-    if (text) found.push(...evaluateAddedLines(join4(cwd, file), text.split(/\r?\n/).map((t, i) => ({ n: i + 1, text: t })), root));
-  }
-  for (const f of [...changed, ...untracked].filter(isSensitivePath))
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join5(changes.gitRoot, file), lines, root));
+  for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" \xE9 dado sens\xEDvel e est\xE1 version\xE1vel (SEC-003). Remova do \xEDndice / adicione ao .gitignore.` });
   const blocking = applyConfig(found, cfg).filter((x) => x.level === "deny");
   if (!blocking.length) return;
@@ -4033,7 +4157,7 @@ function stopGate(input, cfg, cwd) {
   const hash = createHash("sha1").update(reason).digest("hex");
   let state = {};
   try {
-    state = JSON.parse(readFileSync3(stopState, "utf8"));
+    state = JSON.parse(readFileSync4(stopState, "utf8"));
   } catch {
   }
   const count = state.hash === hash ? state.count ?? 0 : 0;
@@ -4060,7 +4184,7 @@ function sessionStart(cfg, input, cwd) {
       stacks,
       "Antes de planejar, implementar ou revisar, chame a tool get_guardrails do MCP ds-mcp com as stacks e phase=plan|implement|review. Detalhe de uma regra: get_standard.",
       "Hooks ativos \u2014 bloqueiam: ler .env/chaves, segredo em c\xF3digo, refer\xEAncia a issue/PR/ticket em coment\xE1rio, desabilitar teste. Pedem confirma\xE7\xE3o: depend\xEAncia nova ou atualiza\xE7\xE3o, IAM, supress\xE3o de lint, enfraquecer TLS/CORS.",
-      "Coment\xE1rios, docs, commits, PRs e issues em pt-BR (jarg\xE3o t\xE9cnico can\xF4nico n\xE3o se traduz). Melhorias fora do escopo v\xE3o em 'Sugest\xF5es fora do escopo' no relat\xF3rio final, n\xE3o no c\xF3digo."
+      "Coment\xE1rios, docs, commits (Conventional Commits: tipo(escopo): descri\xE7\xE3o), PRs e issues em pt-BR (jarg\xE3o t\xE9cnico can\xF4nico n\xE3o se traduz). Melhorias fora do escopo v\xE3o em 'Sugest\xF5es fora do escopo' no relat\xF3rio final, n\xE3o no c\xF3digo."
     ].join("\n")
   );
 }
@@ -4068,7 +4192,7 @@ function main() {
   const event = process.argv[2];
   let input = {};
   try {
-    input = JSON.parse(readFileSync3(0, "utf8") || "{}");
+    input = JSON.parse(readFileSync4(0, "utf8") || "{}");
   } catch {
   }
   const cwd = String(input.cwd ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());

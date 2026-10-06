@@ -4,14 +4,13 @@
  * Lê o evento em JSON no stdin e responde por stdout (JSON) — sempre exit 0.
  * Fail-open: erro interno nunca pode travar o agente; no pior caso o hook não decide nada.
  */
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { loadProjectConfig, type ProjectConfig } from "./hooks/config.js";
 import { evaluateAddedLines, evaluateBash, evaluateRead, evaluateWrite, isSensitivePath, type Violation } from "./hooks/policy.js";
-import { parseDiff } from "./references.js";
+import { collectChanges, git } from "./gitdiff.js";
 
 // ---------- helpers ----------
 const MAX_READ = 1024 * 1024;
@@ -33,7 +32,7 @@ function evaluateTool(input: any, cwd: string, root: string): Violation[] {
   const abs = (p: string) => (isAbsolute(p) ? p : resolve(cwd, p));
   switch (input.tool_name) {
     case "Bash":
-      return evaluateBash(String(ti.command ?? ""));
+      return evaluateBash(String(ti.command ?? ""), root);
     case "Read":
       return evaluateRead(String(ti.file_path ?? ""));
     case "Grep": {
@@ -69,8 +68,6 @@ function preToolUse(input: any, cfg: ProjectConfig, cwd: string) {
 }
 
 // ---------- Stop: gate final sobre o diff ----------
-const git = (cwd: string, args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-
 /** Estado por sessão em tmpdir (base do diff, anti-loop do Stop). */
 const stateFile = (kind: string, sid: unknown) => join(tmpdir(), `ds-mcp-${kind}-${String(sid ?? "x").replace(/\W/g, "")}.json`);
 
@@ -93,27 +90,19 @@ function sessionBase(input: any, cwd: string): string {
 }
 
 function stopGate(input: any, cfg: ProjectConfig, cwd: string) {
-  let diff = "";
-  let untracked: string[] = [];
-  let changed: string[] = [];
+  let changes;
   try {
-    const base = sessionBase(input, cwd);
-    try { diff = git(cwd, ["diff", base, "--unified=0"]); } catch { diff = git(cwd, ["diff", "--unified=0"]); }
-    untracked = git(cwd, ["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
-    changed = git(cwd, ["diff", base, "--name-only"]).split(/\r?\n/).filter(Boolean);
+    changes = collectChanges(cwd, sessionBase(input, cwd));
   } catch {
-    return; // não é repositório git: sem gate
+    return;
   }
+  if (!changes) return; // não é repositório git: sem gate
   const root = cfg.root ?? cwd;
   const found: Violation[] = [];
 
-  for (const [file, lines] of parseDiff(diff)) found.push(...evaluateAddedLines(join(root, file), lines, root));
-  for (const file of untracked.slice(0, 50)) {
-    const text = readText(join(cwd, file));
-    if (text) found.push(...evaluateAddedLines(join(cwd, file), text.split(/\r?\n/).map((t, i) => ({ n: i + 1, text: t })), root));
-  }
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join(changes.gitRoot, file), lines, root));
   // SEC-003: dado sensível versionável (modificado ou não ignorado pelo git)
-  for (const f of [...changed, ...untracked].filter(isSensitivePath))
+  for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" é dado sensível e está versionável (SEC-003). Remova do índice / adicione ao .gitignore.` });
 
   const blocking = applyConfig(found, cfg).filter((x) => x.level === "deny");
@@ -150,7 +139,7 @@ function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
       stacks,
       "Antes de planejar, implementar ou revisar, chame a tool get_guardrails do MCP ds-mcp com as stacks e phase=plan|implement|review. Detalhe de uma regra: get_standard.",
       "Hooks ativos — bloqueiam: ler .env/chaves, segredo em código, referência a issue/PR/ticket em comentário, desabilitar teste. Pedem confirmação: dependência nova ou atualização, IAM, supressão de lint, enfraquecer TLS/CORS.",
-      "Comentários, docs, commits, PRs e issues em pt-BR (jargão técnico canônico não se traduz). Melhorias fora do escopo vão em 'Sugestões fora do escopo' no relatório final, não no código.",
+      "Comentários, docs, commits (Conventional Commits: tipo(escopo): descrição), PRs e issues em pt-BR (jargão técnico canônico não se traduz). Melhorias fora do escopo vão em 'Sugestões fora do escopo' no relatório final, não no código.",
     ].join("\n"),
   );
 }

@@ -153,9 +153,29 @@ export function checkReferences(input: { path?: string; diff?: string }): Findin
   return [...findings, ...propagation(findings)];
 }
 
-export function formatFindings(findings: Finding[]): string {
-  if (!findings.length) return "Nenhuma referência suspeita encontrada.";
+/** Referências indevidas em linhas já coletadas (ex.: mudanças do git). */
+export function checkReferencesFiles(files: Map<string, { n: number; text: string }[]>): Finding[] {
+  const findings: Finding[] = [];
+  for (const [file, lines] of files) findings.push(...scanLines(file, lines, extname(file)));
+  return [...findings, ...propagation(findings)];
+}
+
+export function formatFindings(findings: Finding[], opts: { limit?: number; empty?: string } = {}): string {
+  if (!findings.length) return opts.empty ?? "Nenhuma referência suspeita encontrada.";
+  const limit = opts.limit ?? 200;
   const errors = findings.filter((f) => f.severity === "error").length;
-  const rows = findings.map((f) => `${f.severity.toUpperCase().padEnd(5)} ${f.rule}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.message}${f.snippet ? `\n        > ${f.snippet}` : ""}`);
-  return `${errors} erro(s), ${findings.length - errors} alerta(s)\n\n${rows.join("\n")}`;
+  const byRule = new Map<string, number>();
+  for (const f of findings) byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
+  const summary = [...byRule].sort((a, b) => b[1] - a[1]).map(([rule, n]) => `${rule} ×${n}`).join(", ");
+  // erros primeiro: se houver corte, o que fica visível é o mais grave
+  const ordered = [...findings].sort((a, b) => Number(b.severity === "error") - Number(a.severity === "error"));
+  const rows = ordered.slice(0, limit).map((f) => `${f.severity.toUpperCase().padEnd(5)} ${f.rule}  ${f.file}${f.line ? `:${f.line}` : ""}  ${f.message}${f.snippet ? `
+        > ${f.snippet}` : ""}`);
+  const cut = findings.length > limit ? `
+
+… ${findings.length - limit} achado(s) omitido(s) (limit=${limit}).` : "";
+  return `${errors} erro(s), ${findings.length - errors} alerta(s)
+Por regra: ${summary}
+
+${rows.join("\n")}${cut}`;
 }

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -7,7 +11,7 @@ await client.connect(new StdioClientTransport({ command: "node", args: ["dist/in
 const call = async (name, args) => (await client.callTool({ name, arguments: args })).content[0].text;
 
 const tools = (await client.listTools()).tools.map((t) => t.name);
-assert.deepEqual(tools.sort(), ["check_language", "check_project", "check_references", "get_guardrails", "get_standard", "list_standards"]);
+assert.deepEqual(tools.sort(), ["check_commits", "check_language", "check_project", "check_references", "get_guardrails", "get_standard", "list_standards"]);
 console.log("tools:", tools.join(", "));
 
 // ---- guardrails por stack e fase ----
@@ -65,7 +69,8 @@ assert.doesNotMatch(lang, /lang\.ts:5 /); // `canalização` em code span é cit
 
 const proj = await call("check_language", { path: "scripts/fixtures/proj" });
 console.log(proj + "\n");
-assert.match(proj, /glossário do projeto: .*GLOSSARY\.md.*glossary\.md/i); // as duas fontes, domínio e projeto
+assert.match(proj, /glossários: .*GLOSSARY\.md.*glossary\.md/i); // as duas fontes, domínio e projeto
+assert.match(proj, /Por regra: .*LANG-002/); // resumo por regra
 assert.match(proj, /LANG-002\s+src[\\/]a\.ts:1 .*fatura/); // avoid definido pelo projeto
 assert.match(proj, /LANG-002\s+src[\\/]a\.ts:2 .*publicação/); // projeto adiciona avoid a termo do base
 assert.doesNotMatch(proj, /a\.ts:3 /);
@@ -77,6 +82,45 @@ assert.doesNotMatch(proj, /README\.md:(3|7) /); // smoke test ok; bloco de códi
 const langDiff = ["+++ b/src/x.ts", "@@ -1,0 +1,1 @@", "+// Faz a canalização do build."].join("\n");
 assert.match(await call("check_language", { root: "scripts/fixtures/proj", diff: langDiff }), /LANG-002\s+src\/x\.ts:1 /);
 console.log("check_language: ok");
+
+// ---- modo repo/base: mudanças do git sem colar diff (usado por /ds:review) ----
+const repo = mkdtempSync(join(tmpdir(), "ds-smoke-git-"));
+const g = (...a) => execFileSync("git", a, { cwd: repo, stdio: "ignore" });
+g("init", "-q");
+g("config", "user.email", "t@t");
+g("config", "user.name", "t");
+mkdirSync(join(repo, "src"));
+writeFileSync(join(repo, "src", "a.ts"), "// Calcula o total.\n// Legado: conforme issue #1\nexport const a = 1;\n");
+g("add", "-A");
+g("commit", "-q", "-m", "chore: base");
+// 1 violação commitada + 1 no working tree + 1 arquivo novo; o legado (issue #1) não deve aparecer
+writeFileSync(join(repo, "src", "a.ts"), "// Calcula o total.\n// Legado: conforme issue #1\nexport const a = 1;\n// Ajuste conforme issue #22\nexport const b = 2;\n");
+g("add", "-A");
+g("commit", "-q", "-m", "feat: b");
+writeFileSync(join(repo, "src", "a.ts"), readFileSync(join(repo, "src", "a.ts"), "utf8") + "// Roda o teste de fumaça\nexport const c = 3;\n");
+writeFileSync(join(repo, "src", "novo.ts"), "// TODO(JIRA-9): ajustar\nexport const d = 4;\n");
+
+const sinceBase = await call("check_references", { repo, base: "HEAD~1" });
+assert.match(sinceBase, /a\.ts:4 /); // commitada depois da base
+assert.match(sinceBase, /novo\.ts:1 /); // arquivo novo
+assert.doesNotMatch(sinceBase, /a\.ts:2 /); // legado não conta
+assert.match(sinceBase, /Por regra: .*DOC-004/);
+const onlyWorktree = await call("check_references", { repo }); // base HEAD
+assert.doesNotMatch(onlyWorktree, /a\.ts:4 /); // já commitada: fora do diff de HEAD
+assert.match(onlyWorktree, /novo\.ts:1 /);
+assert.match(await call("check_language", { repo, base: "HEAD~1" }), /LANG-002\s+src[\\/]a\.ts:6 .*fumaça/);
+const bad = await client.callTool({ name: "check_references", arguments: { repo, base: "--output=x" } });
+assert.equal(bad.isError, true); // base que parece opção do git é recusada
+assert.equal((await client.callTool({ name: "check_references", arguments: { path: ".", repo } })).isError, true); // fontes exclusivas
+// ---- check_commits ----
+g("commit", "-q", "--allow-empty", "-m", "added stuff");
+const commitsOut = await call("check_commits", { repo, base: "HEAD~2" });
+assert.match(commitsOut, /2 commit\(s\) avaliados, 1 com problemas/);
+assert.match(commitsOut, /ERRO\s+COMMIT-001/);
+assert.match(commitsOut, /COMMIT-002/); // "added" em inglês
+assert.doesNotMatch(commitsOut, /"feat: b"/); // commit correto não aparece
+rmSync(repo, { recursive: true, force: true });
+console.log("repo/base: ok");
 
 console.log("\n[check_project .]\n" + (await call("check_project", { path: ".", stacks: ["web", "devops"] })));
 await client.close();

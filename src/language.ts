@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { standardsDir } from "./catalog.js";
+import { collectChanges } from "./gitdiff.js";
 import { commentText, HASH_EXT, MAX_FILE_BYTES, parseDiff, SLASH_EXT, testTitle, walk, type Finding } from "./references.js";
 
 interface Entry {
@@ -148,11 +149,14 @@ export function createLanguageScanner(projectStart?: string) {
   };
 }
 
-export function checkLanguage(input: { path?: string; diff?: string; root?: string }): { findings: Finding[]; projectGlossary: string | null } {
-  const scanner = createLanguageScanner(input.root ?? input.path);
+export function checkLanguage(input: { path?: string; diff?: string; root?: string; repo?: string; base?: string }): { findings: Finding[]; projectGlossary: string | null } {
+  const scanner = createLanguageScanner(input.root ?? input.repo ?? input.path);
   const findings: Finding[] = [];
 
-  if (input.diff) {
+  if (input.repo) {
+    const changes = collectChanges(resolve(input.repo), input.base);
+    if (changes) for (const [file, lines] of changes.added) findings.push(...scanner.scan(file, lines));
+  } else if (input.diff) {
     for (const [f, lines] of parseDiff(input.diff)) findings.push(...scanner.scan(f, lines));
   } else if (input.path) {
     const root = resolve(input.path);

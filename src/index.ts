@@ -5,8 +5,10 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { forStacks, loadCatalog, standardsDir, type Doc } from "./catalog.js";
 import { checkProject } from "./checks.js";
+import { collectChanges, commitsSince } from "./gitdiff.js";
+import { evaluateCommitMessage } from "./hooks/policy.js";
 import { checkLanguage } from "./language.js";
-import { checkReferences, formatFindings } from "./references.js";
+import { checkReferences, checkReferencesFiles, formatFindings } from "./references.js";
 
 const server = new McpServer({ name: "ds-mcp", version: "0.1.0" });
 
@@ -55,20 +57,34 @@ server.registerTool(
     ),
 );
 
+// Fonte das linhas a escanear: exatamente uma entre path, diff e repo.
+const sourceArgs = {
+  path: z.string().optional().describe("Arquivo ou diretório (auditoria do que já existe)"),
+  diff: z.string().optional().describe("Saída de `git diff` (unified); só as linhas adicionadas contam"),
+  repo: z.string().optional().describe("Repositório git: avalia as mudanças desde `base` (commits + working tree + arquivos novos). Sem colar diff"),
+  base: z.string().optional().describe("Com `repo`: ref de comparação (default HEAD; ex.: main, origin/main, HEAD~3)"),
+  limit: z.number().int().positive().optional().describe("Máximo de achados listados (default 200); o resumo por regra é sempre completo"),
+};
+const oneSource = ({ path, diff, repo }: { path?: string; diff?: string; repo?: string }) => [path, diff, repo].filter(Boolean).length === 1;
+const ONE = "Informe exatamente um entre `path`, `diff` e `repo`.";
+
 server.registerTool(
   "check_references",
   {
     description:
       "Escaneia comentários e nomes de teste atrás de referências indevidas (issue, PR, ticket, conversa, URL, TODO com ref) " +
-      "e referências a ADR/spec que exigem justificativa (DOC-003..006, DOC-010). Informe `diff` (só linhas adicionadas) OU `path`.",
-    inputSchema: {
-      path: z.string().optional().describe("Arquivo ou diretório"),
-      diff: z.string().optional().describe("Saída de `git diff` (unified)"),
-    },
+      "e referências a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudanças.",
+    inputSchema: sourceArgs,
   },
-  async ({ path, diff }) => {
-    if (!path === !diff) return { ...text("Informe exatamente um entre `path` e `diff`."), isError: true };
-    return text(formatFindings(checkReferences({ path: path ? resolve(path) : undefined, diff })));
+  async (args) => {
+    if (!oneSource(args)) return { ...text(ONE), isError: true };
+    const { path, diff, repo, base, limit } = args;
+    if (repo) {
+      const changes = collectChanges(resolve(repo), base);
+      if (!changes) return { ...text(`"${repo}" não é um repositório git.`), isError: true };
+      return text(formatFindings(checkReferencesFiles(changes.added), { limit }));
+    }
+    return text(formatFindings(checkReferences({ path: path ? resolve(path) : undefined, diff }), { limit }));
   },
 );
 
@@ -77,20 +93,42 @@ server.registerTool(
   {
     description:
       "Escaneia comentários, nomes de teste e .md atrás de tradução literal de vocabulário técnico (LANG-002) e texto em inglês (LANG-001). " +
-      "Usa o vocabulário-base + docs/glossary.md do projeto (procurado a partir de `root` ou `path`). Informe `diff` OU `path`.",
-    inputSchema: {
-      path: z.string().optional().describe("Arquivo ou diretório"),
-      diff: z.string().optional().describe("Saída de `git diff` (unified)"),
-      root: z.string().optional().describe("Raiz do projeto, para achar docs/glossary.md (necessário quando só há `diff`)"),
-    },
+      "Usa o vocabulário-base, o GLOSSARY.md de domínio (_Avoid_) e o docs/glossary.md do projeto. Informe `path` (auditoria), `diff` OU `repo` (+`base`).",
+    inputSchema: { ...sourceArgs, root: z.string().optional().describe("Raiz do projeto, para achar os glossários (necessário só com `diff`)") },
   },
-  async ({ path, diff, root }) => {
-    if (!path === !diff) return { ...text("Informe exatamente um entre `path` e `diff`."), isError: true };
-    const { findings, projectGlossary } = checkLanguage({ path, diff, root });
-    const head = `glossário do projeto: ${projectGlossary ?? "nenhum (usando só o vocabulário-base)"}
+  async (args) => {
+    if (!oneSource(args)) return { ...text(ONE), isError: true };
+    const { path, diff, repo, base, root, limit } = args;
+    if (repo && !collectChanges(resolve(repo), base)) return { ...text(`"${repo}" não é um repositório git.`), isError: true };
+    const { findings, projectGlossary } = checkLanguage({ path, diff, root, repo, base });
+    const head = `glossários: ${projectGlossary ?? "nenhum (usando só o vocabulário-base)"}
 
 `;
-    return text(head + (findings.length ? formatFindings(findings) : "Nenhum problema de idioma encontrado."));
+    return text(head + formatFindings(findings, { limit, empty: "Nenhum problema de idioma encontrado." }));
+  },
+);
+
+server.registerTool(
+  "check_commits",
+  {
+    description:
+      "Avalia as mensagens dos commits em `base..HEAD` contra COMMIT-001..003 (Conventional Commits, pt-BR, 72 caracteres) e o idioma (LANG-001/002).",
+    inputSchema: {
+      repo: z.string().describe("Repositório git"),
+      base: z.string().optional().describe("Ref de comparação (default HEAD~1); avalia os commits de base..HEAD"),
+    },
+  },
+  async ({ repo, base }) => {
+    const commits = commitsSince(resolve(repo), base ?? "HEAD~1");
+    if (!commits) return { ...text(`Não foi possível listar commits de "${base ?? "HEAD~1"}..HEAD" em "${repo}" (não é um repositório git, ou a base não existe).`), isError: true };
+    if (!commits.length) return text("Nenhum commit na faixa.");
+    const rows = commits.flatMap((c) => {
+      const vs = evaluateCommitMessage(c.message, resolve(repo));
+      const subject = c.message.split(/\r?\n/)[0];
+      return vs.length ? [`${c.sha.slice(0, 7)} "${subject}"`, ...vs.map((x) => `  ${x.level === "deny" ? "ERRO " : "ALERTA"} ${x.rule}  ${x.message}`)] : [];
+    });
+    const bad = commits.filter((c) => evaluateCommitMessage(c.message, resolve(repo)).length).length;
+    return text(`${commits.length} commit(s) avaliados, ${bad} com problemas.${rows.length ? `\n\n${rows.join("\n")}` : ""}`);
   },
 );
 

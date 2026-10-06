@@ -1,6 +1,7 @@
 import { basename, extname } from "node:path";
 import { createLanguageScanner } from "../language.js";
 import { scanLines } from "../references.js";
+import { parseCommits } from "./commit.js";
 
 /**
  * Política dos hooks: funções puras (entrada → violações). Nada aqui conhece o protocolo do Claude Code.
@@ -59,7 +60,38 @@ function installsPackage(segment: string): boolean {
   return false;
 }
 
-export function evaluateBash(command: string): Violation[] {
+// ---------- mensagens de commit (COMMIT-001..003; LANG-001/002 no texto) ----------
+const CC = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)\s]+\))?!?: \S/;
+const CC_PREFIX = /^[a-z]+(\([^)]*\))?!?:\s*/;
+const SKIP_SUBJECT = /^(Merge|Revert|fixup!|squash!|amend!)\b/;
+// verbos que só existem em inglês (evita "remove"/"move"/"use", que também são pt-BR)
+const EN_VERB = /^(add|adds|added|fix|fixes|fixed|update|updates|updated|implement|implements|create|creates|change|changes|improve|improves|support|supports|make|makes|allow|allows|handle|handles|rename|renames|bump|enable|enables|replace|replaces|prevent|prevents|ensure|ensures|initial)\b/i;
+
+/** Avalia uma mensagem de commit já extraída (COMMIT-001..003 + idioma). */
+export function evaluateCommitMessage(message: string, root?: string): Violation[] {
+  const out: Violation[] = [];
+  const lines = message.split(/\r?\n/);
+  const subject = lines.find((l) => l.trim()) ?? "";
+  if (SKIP_SUBJECT.test(subject)) return out;
+  if (!CC.test(subject))
+    out.push(v("COMMIT-001", "deny", `A mensagem de commit "${subject.slice(0, 60)}" não segue Conventional Commits: "tipo(escopo): descrição em pt-BR", ex.: "fix: corrige o total da venda".`));
+  if (subject.length > 72) out.push(v("COMMIT-003", "warn", `Primeira linha do commit com ${subject.length} caracteres (máx. 72).`));
+  if (EN_VERB.test(subject.replace(CC_PREFIX, "")))
+    out.push(v("COMMIT-002", "warn", "A descrição do commit parece estar em inglês; use pt-BR (o tipo feat/fix permanece em inglês)."));
+  const scanner = createLanguageScanner(root);
+  for (const f of scanner.scan("COMMIT_EDITMSG.md", lines.map((text, i) => ({ n: i + 1, text }))))
+    out.push(v(f.rule, "warn", `mensagem de commit, linha ${f.line}: ${f.message}`));
+  return out;
+}
+
+/** Avalia os `git commit -m ...` de um comando Bash (hook PreToolUse). */
+export function evaluateCommit(command: string, root?: string): Violation[] {
+  return parseCommits(command)
+    .filter((c) => c.messages.length > 0) // --amend --no-edit, -F arquivo: nada a avaliar
+    .flatMap((c) => evaluateCommitMessage(c.messages.join("\n\n"), root));
+}
+
+export function evaluateBash(command: string, root?: string): Violation[] {
   const out: Violation[] = [];
 
   // SEC-001/003: ler ou versionar .env / chaves. `.gitignore` e `.env.example` são ok.
@@ -114,6 +146,7 @@ export function evaluateBash(command: string): Violation[] {
         out.push(v("TEST-005", "ask", `Remove o arquivo de teste "${tok}". Justifique a remoção (TEST-005).`));
         break;
       }
+  out.push(...evaluateCommit(command, root));
   return out;
 }
 

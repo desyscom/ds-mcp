@@ -38,6 +38,14 @@ assert.equal(o.permissionDecision, "ask");
 assert.match(o.permissionDecisionReason, /DEP-001/);
 assert.equal(specific(pre("Bash", { command: "aws iam attach-role-policy --role-name a --policy-arn b" })).permissionDecision, "ask");
 
+// ---- PreToolUse: mensagem de commit ----
+o = specific(pre("Bash", { command: 'git commit -m "added login"' }));
+assert.equal(o.permissionDecision, "deny");
+assert.match(o.permissionDecisionReason, /COMMIT-001/);
+assert.equal(pre("Bash", { command: 'git commit -m "feat: adiciona o login"' }), "");
+assert.equal(specific(pre("Bash", { command: "git commit -m \"$(cat <<'EOF'\nupdate stuff\nEOF\n)\"" })).permissionDecision, "deny");
+assert.match(specific(pre("Bash", { command: 'git commit -m "feat: add login for users"' })).additionalContext, /COMMIT-002/);
+
 // ---- PreToolUse: avisos viram contexto, não bloqueiam ----
 o = specific(pre("Write", { file_path: "src/a.ts", content: "// Roda o teste de fumaça antes do deploy.\nconst a = 1;" }));
 assert.equal(o.permissionDecision, undefined);
