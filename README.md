@@ -102,6 +102,23 @@ claude --plugin-dir D:/projetos/github/MCPs/DS-MCP     # teste local
 
 O `dist/` é **empacotado** (esbuild) e precisa ser versionado: o plugin não roda `npm install`. Rode `npm run build` antes de commitar.
 
+### Instalar pelo marketplace (time)
+
+Este repositório é também um marketplace (`.claude-plugin/marketplace.json`, nome `desyscom`) com dois plugins:
+
+| Plugin | Origem |
+|---|---|
+| `ds` | este repositório (MCP, hooks, `/ds:review`, `/ds:audit`) |
+| `mattpocock-skills` | `mattpocock/skills`, **fixado** num commit (`sha`), então atualizações dele só chegam quando alguém bumpar o `sha` aqui |
+
+```bash
+claude plugin marketplace add desyscom/ds-mcp
+claude plugin install ds@desyscom
+claude plugin install mattpocock-skills@desyscom    # opcional
+```
+
+Depois de instalar o `mattpocock-skills`, rode uma vez por projeto a skill `setup-matt-pocock-skills` dele. Para atualizar o do Matt, troque o `sha` no `marketplace.json` depois de conferir o que mudou. Como os usuários recebem novas versões do plugin `ds` (papel do `version` em `plugin.json`) está descrito em "Host and maintain a marketplace" na documentação do Claude Code; ainda não validei esse fluxo na prática.
+
 ## Skills
 
 | Comando | O que faz |

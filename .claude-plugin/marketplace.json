@@ -1,0 +1,26 @@
+{
+  "name": "desyscom",
+  "description": "Plugins de desenvolvimento da desyscom: guardrails e hooks (ds) mais as skills de engenharia do Matt Pocock",
+  "owner": {
+    "name": "desyscom"
+  },
+  "plugins": [
+    {
+      "name": "ds",
+      "source": ".",
+      "description": "Guardrails, padrões e hooks de desenvolvimento: MCP ds-mcp, hooks de bloqueio, /ds:review e /ds:audit",
+      "category": "development"
+    },
+    {
+      "name": "mattpocock-skills",
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills",
+        "ref": "main",
+        "sha": "7a030a8b0dcaa601bb0dda9aaf174affb3d61145"
+      },
+      "description": "Skills de engenharia de terceiros (Matt Pocock, MIT), fixadas num commit: grilling, TDD, code-review, domain-modeling e outras",
+      "category": "development"
+    }
+  ]
+}
