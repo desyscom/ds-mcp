@@ -160,6 +160,30 @@ expectCited("barra-asterisco em string não abre bloco", ".ts", numbered(`const 
 expectCited("barra-asterisco em regex não abre bloco", ".ts", numbered("const re = /a\\/*b/;", CODIGO), []);
 expectCited("barra-asterisco dentro de comentário de linha não abre bloco", ".ts", numbered(`/${"/"} o padrão ${BLOCO} fica aqui`, CODIGO), []);
 
+// ---- lexer: o comentário vem da sintaxe, não da posição na linha ----
+const LINHA = "/" + "/";
+const CRASE = "`";
+expectCited("bloco depois de `=`", ".ts", numbered(`const x =${BLOCO} ver #88 */ 1;`), [1]);
+expectCited("bloco depois de `[`", ".ts", numbered(`const a = [${BLOCO} ver #88 */];`), [1]);
+expectCited("JSX depois da tag de fecho", ".tsx", numbered(`<p>texto</p> ${JSX} ver #45 */}`), [1]);
+expectCited("divisão depois de `++` não abre regex", ".ts", numbered(`const m = a++ / 2; ${LINHA} ver #12`), [1]);
+expectCited("barras dentro de string", ".ts", numbered(`const u = "abc${LINHA}#12";`), []);
+expectCited("barra escapada no fim da regex", ".ts", numbered(`const m = /a\\${LINHA}.exec("#12");`), []);
+expectCited("template literal não é comentário", ".ts", numbered(`const cabecalho = ${CRASE}`, ` * gerado; ver #12`, `${LINHA} ver #13`, `${CRASE};`, CODIGO), []);
+expectCited("comentário dentro da expressão do template", ".ts", numbered(`const s = ${CRASE}a\${x ${BLOCO} ver #12 */}b${CRASE};`), [1]);
+expectCited("trecho que começa dentro de um template", ".ts", [
+  { n: 10, text: "  WHERE x = 1" },
+  { n: 11, text: `${CRASE};` },
+  { n: 12, text: `${LINHA} ver #12` },
+], [12]);
+expectCited("trecho que termina dentro de um template", ".ts", numbered(`${LINHA} ver #12`, `const q = sql${CRASE}`, "  SELECT 1"), [1]);
+expectCited("trecho que começa na continuação de um bloco", ".ts", [{ n: 7, text: " * decisão do #620" }, { n: 8, text: " */" }, { n: 9, text: CODIGO }], [7]);
+expectCited("string crua do Go", ".go", numbered(`x := ${CRASE}${LINHA} #12${CRASE}`, `y := 1 ${LINHA} ver #12`), [2]);
+expectCited("bloco de texto do Java", ".java", numbered('String s = """', `  ${LINHA} #12`, '""";', `int y = 1; ${LINHA} ver #12`), [4]);
+expectCited("string verbatim do C#", ".cs", numbered(`var s = @"a ${LINHA} #12";`), []);
+expectCited("lifetime do Rust não abre literal", ".rs", numbered(`fn f<'a>(x: &'a str) {} ${LINHA} ver #12`), [1]);
+expectCited("CSS não tem comentário de linha", ".css", numbered(`a { background: url(${LINHA}cdn.x/#12); }`, `${BLOCO} ver #12 */`), [2]);
+
 // ---- vocabulário: "ramo", "árvore" e "acessório" são português legítimo ----
 const lang = createLanguageScanner(process.cwd());
 const avoided = (text) => lang.scan("a.ts", [{ n: 1, text: c(text) }]).filter((f) => f.rule === "LANG-002");

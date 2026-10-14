@@ -81,6 +81,11 @@ w("src/a.ts", "", `${BLOCO}\n\n${citacao}\n*/\nconst a = 1;`, "deny", "DOC-004")
 w("src/a.ts", `${BLOCO}\n*/`, `${BLOCO}\n${citacao}\n*/`, "deny", "DOC-004");
 // o bloco legado não conta: só a linha de código foi adicionada
 w("src/a.ts", `${BLOCO}\n${citacao}\n*/`, `${BLOCO}\n${citacao}\n*/\nconst a = 2;`, "ok");
+// o conteúdo de um template literal (um cabeçalho gerado) não é comentário
+const LINHA = "/" + "/";
+w("scripts/gerador.ts", "", `const cabecalho = \`\n${LINHA} gerado; ver #12\n\`;`, "ok");
+// o new_string do Edit pode começar dentro de um template: a crase fecha, e o comentário depois dela é lido
+w("src/consulta.ts", "  WHERE x = 0", `  WHERE x = 1\n\`;\n${LINHA} ver #12`, "deny", "DOC-004");
 
 // ---- mensagens de commit (COMMIT-001..003) ----
 const HD = (msg) => `git commit -m "$(cat <<'EOF'\n${msg}\nEOF\n)"`;
