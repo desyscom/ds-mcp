@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { loadRuleIds } from "../catalog.js";
 import { DECISION_PREFIX, TICKET_PREFIX, type ScanOptions } from "../references.js";
 
 /** Exceção permanente a uma regra. O motivo é obrigatório (PREC-003). */
@@ -33,8 +34,10 @@ const empty = (root: string | null): ProjectConfig => ({
   stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], decisionIdPrefixes: [], invalidDecisionIdPrefixes: [], root,
 });
 
-/** Opções do scanner de referências vindas do `.ds-mcp.json`. */
-export const scanOptions = (cfg: ProjectConfig): ScanOptions => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
+/** Opções do scanner de referências: as do `.ds-mcp.json` e os IDs de regra dos padrões carregados. */
+export const scanOptions = (cfg: ProjectConfig): ScanOptions => ({
+  ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes, ruleIds: loadRuleIds(),
+});
 
 export function loadProjectConfig(start: string): ProjectConfig {
   let dir = resolve(start);

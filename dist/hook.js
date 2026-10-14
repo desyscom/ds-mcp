@@ -3534,13 +3534,41 @@ var require_gray_matter = __commonJS({
 
 // src/hook.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync4, readFileSync as readFileSync4, statSync as statSync3, writeFileSync } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync5, statSync as statSync4, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join as join5, resolve as resolve4 } from "node:path";
 
 // src/hooks/config.ts
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync as readFileSync2 } from "node:fs";
+import { dirname as dirname2, join as join2, resolve as resolve2 } from "node:path";
+
+// src/catalog.ts
+var import_gray_matter = __toESM(require_gray_matter(), 1);
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+var here = dirname(fileURLToPath(import.meta.url));
+var standardsDir = resolve(
+  process.env.DS_MCP_STANDARDS_DIR ?? join(here, "..", "standards")
+);
+function walk(dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    return statSync(full).isDirectory() ? walk(full) : full.endsWith(".md") ? [full] : [];
+  });
+}
+var DECLARED_ID = /^- `([A-Z]{2,10}-\d{3})`/;
+var ID = /\b[A-Z]{2,10}-\d{3}\b/g;
+function loadRuleIds(dir = standardsDir) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const file of walk(dir))
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const declared = DECLARED_ID.exec(line);
+      if (declared) ids.add(declared[1]);
+      else if (line.startsWith("*IDs retirados:*")) for (const m of line.matchAll(ID)) ids.add(m[0]);
+    }
+  return ids;
+}
 
 // src/references.ts
 var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
@@ -3609,10 +3637,14 @@ function ticketKey(ignore = []) {
   const key = ignore.join("|");
   let re = ticketKeyCache.get(key);
   if (!re) {
-    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`, "g");
     ticketKeyCache.set(key, re);
   }
   return re;
+}
+function hasTicketKey(text, opts) {
+  for (const m of text.matchAll(ticketKey(opts.ticketKeyIgnore))) if (!opts.ruleIds?.has(m[0])) return true;
+  return false;
 }
 var decisionIdCache = /* @__PURE__ */ new Map();
 function decisionId(prefixes) {
@@ -3641,7 +3673,7 @@ var RE = {
 function scanText(text, kind, opts) {
   const out = [];
   const add = (rule, severity, message) => out.push({ rule, severity, message });
-  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || ticketKey(opts.ticketKeyIgnore).test(text) || RE.tracker.test(text);
+  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || hasTicketKey(text, opts) || RE.tracker.test(text);
   if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
   if (RE.discussion.test(text) || RE.discussionChannel.test(text)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
   if (kind === "comment") {
@@ -3706,14 +3738,18 @@ var empty = (root) => ({
   invalidDecisionIdPrefixes: [],
   root
 });
-var scanOptions = (cfg) => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
+var scanOptions = (cfg) => ({
+  ticketKeyIgnore: cfg.ticketKeyIgnore,
+  decisionIdPrefixes: cfg.decisionIdPrefixes,
+  ruleIds: loadRuleIds()
+});
 function loadProjectConfig(start) {
-  let dir = resolve(start);
+  let dir = resolve2(start);
   for (let i = 0; i < 8; i++) {
-    const file = join(dir, ".ds-mcp.json");
+    const file = join2(dir, ".ds-mcp.json");
     if (existsSync(file)) {
       try {
-        const raw = JSON.parse(readFileSync(file, "utf8"));
+        const raw = JSON.parse(readFileSync2(file, "utf8"));
         const cfg = empty(dir);
         cfg.stacks = Array.isArray(raw.stacks) ? raw.stacks.filter((s) => typeof s === "string") : [];
         for (const d of Array.isArray(raw.disable) ? raw.disable : []) {
@@ -3735,7 +3771,7 @@ function loadProjectConfig(start) {
         return empty(dir);
       }
     }
-    const parent = dirname(dir);
+    const parent = dirname2(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -3746,21 +3782,12 @@ function loadProjectConfig(start) {
 import { basename as basename2, extname as extname2 } from "node:path";
 
 // src/language.ts
-import { existsSync as existsSync3, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync3, readFileSync as readFileSync4, statSync as statSync3 } from "node:fs";
 import { basename, dirname as dirname3, extname, join as join4, relative as relative2, resolve as resolve3 } from "node:path";
-
-// src/catalog.ts
-var import_gray_matter = __toESM(require_gray_matter(), 1);
-import { dirname as dirname2, join as join2, relative, resolve as resolve2, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-var here = dirname2(fileURLToPath(import.meta.url));
-var standardsDir = resolve2(
-  process.env.DS_MCP_STANDARDS_DIR ?? join2(here, "..", "standards")
-);
 
 // src/gitdiff.ts
 import { execFileSync } from "node:child_process";
-import { existsSync as existsSync2, readFileSync as readFileSync2, statSync } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
 import { join as join3 } from "node:path";
 var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
 var SAFE_REF = /^[\w][\w./~^@{}-]*$/;
@@ -3790,8 +3817,8 @@ function collectChanges(cwd, base = "HEAD") {
   const added = parseDiff(diff);
   for (const file of untracked.slice(0, MAX_UNTRACKED)) {
     const abs = join3(gitRoot, file);
-    if (!existsSync2(abs) || !statSync(abs).isFile() || statSync(abs).size > MAX_FILE) continue;
-    added.set(file, readFileSync2(abs, "utf8").split(/\r?\n/).map((text, i) => ({ n: i + 1, text })));
+    if (!existsSync2(abs) || !statSync2(abs).isFile() || statSync2(abs).size > MAX_FILE) continue;
+    added.set(file, readFileSync3(abs, "utf8").split(/\r?\n/).map((text, i) => ({ n: i + 1, text })));
   }
   return { gitRoot, added, files: [.../* @__PURE__ */ new Set([...changed, ...untracked])] };
 }
@@ -3826,7 +3853,7 @@ function parseDomainGlossary(md) {
   return out;
 }
 function findUp(start, rel) {
-  let dir = statSync2(start).isFile() ? dirname3(start) : start;
+  let dir = statSync3(start).isFile() ? dirname3(start) : start;
   for (let i = 0; i < 6; i++) {
     const candidate = join4(dir, rel);
     if (existsSync3(candidate)) return candidate;
@@ -3840,17 +3867,17 @@ function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
   const put = (list) => list.forEach((e) => merged.set(e.term, e));
   const base = join4(standardsDir, "all", "vocabulary.md");
-  if (existsSync3(base)) put(parseVocabulary(readFileSync3(base, "utf8")));
+  if (existsSync3(base)) put(parseVocabulary(readFileSync4(base, "utf8")));
   const sources = [];
   if (projectStart && existsSync3(projectStart)) {
     const domain = findUp(projectStart, "GLOSSARY.md");
     if (domain) {
-      put(parseDomainGlossary(readFileSync3(domain, "utf8")));
+      put(parseDomainGlossary(readFileSync4(domain, "utf8")));
       sources.push(domain);
     }
     const project = findUp(projectStart, join4("docs", "glossary.md"));
     if (project) {
-      put(parseVocabulary(readFileSync3(project, "utf8")));
+      put(parseVocabulary(readFileSync4(project, "utf8")));
       sources.push(project);
     }
   }
@@ -4149,7 +4176,7 @@ function evaluateAddedLines(path, added, root, scan = {}) {
 
 // src/hook.ts
 var MAX_READ = 1024 * 1024;
-var readText = (p) => existsSync4(p) && statSync3(p).isFile() && statSync3(p).size <= MAX_READ ? readFileSync4(p, "utf8") : "";
+var readText = (p) => existsSync4(p) && statSync4(p).isFile() && statSync4(p).size <= MAX_READ ? readFileSync5(p, "utf8") : "";
 var fmt = (vs) => vs.map((x) => `- [${x.rule}] ${x.message}`).join("\n");
 var emit = (o) => process.stdout.write(JSON.stringify(o));
 var pre = (extra) => emit({ hookSpecificOutput: { hookEventName: "PreToolUse", ...extra } });
@@ -4210,7 +4237,7 @@ function recordBase(input, cwd) {
 }
 function sessionBase(input, cwd) {
   try {
-    const head = JSON.parse(readFileSync4(stateFile("base", input.session_id), "utf8")).head;
+    const head = JSON.parse(readFileSync5(stateFile("base", input.session_id), "utf8")).head;
     if (typeof head === "string" && /^[0-9a-f]{7,40}$/.test(head)) {
       git(cwd, ["cat-file", "-e", `${head}^{commit}`]);
       return head;
@@ -4239,7 +4266,7 @@ function stopGate(input, cfg, cwd) {
   const hash = createHash("sha1").update(reason).digest("hex");
   let state = {};
   try {
-    state = JSON.parse(readFileSync4(stopState, "utf8"));
+    state = JSON.parse(readFileSync5(stopState, "utf8"));
   } catch {
   }
   const count = state.hash === hash ? state.count ?? 0 : 0;
@@ -4278,7 +4305,7 @@ function main() {
   const event = process.argv[2];
   let input = {};
   try {
-    input = JSON.parse(readFileSync4(0, "utf8") || "{}");
+    input = JSON.parse(readFileSync5(0, "utf8") || "{}");
   } catch {
   }
   const cwd = String(input.cwd ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());

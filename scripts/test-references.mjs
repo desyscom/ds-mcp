@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadRuleIds } from "../build/catalog.js";
 import { loadProjectConfig } from "../build/hooks/config.js";
 import { createLanguageScanner } from "../build/language.js";
 import { scanLines } from "../build/references.js";
@@ -45,6 +46,20 @@ for (const t of [
 fires("Usa o CST-00 na saída.");
 passes("Usa o CST-00 na saída.", { ticketKeyIgnore: ["CST"] });
 fires("Corrige PROJ-42", { ticketKeyIgnore: ["CST"] });
+
+// ---- ID de regra dos padrões: nomeia um guardrail, não um ticket ----
+const ids = loadRuleIds();
+n++;
+assert.ok(ids.has("DOC-013") && ids.has("SEC-002"), "IDs declarados entram");
+assert.ok(ids.has("DOC-009") && ids.has("REACT-008"), "IDs retirados entram");
+assert.ok(!ids.has("ADR-012") && !ids.has("DOC-099"), "exemplo e ID inexistente ficam de fora");
+const R = { ruleIds: ids };
+passes("Bloqueia segredo no código (SEC-002).", R);
+passes("O ID retirado DOC-009 virou parte do DOC-002.", R);
+fires("Bloqueia segredo no código (SEC-002)."); // sem a lista, o scanner não sabe que é regra
+fires("Ver DOC-099 antes de mudar.", R);
+fires("SEC-002 e PROJ-42 tratam do mesmo segredo.", R);
+fires("Regressão de TEST-12.", R);
 
 const proj = mkdtempSync(join(tmpdir(), "ds-refs-"));
 writeFileSync(join(proj, ".ds-mcp.json"), JSON.stringify({ ticketKeyIgnore: ["CST", "CSOSN", "cst", "N12", "X", 5, "ABCDEFGHIJK"] }));

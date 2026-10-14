@@ -3,7 +3,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { forStacks, loadCatalog, standardsDir, type Doc } from "./catalog.js";
+import { forStacks, loadCatalog, loadRuleIds, standardsDir, type Doc } from "./catalog.js";
 import { checkProject } from "./checks.js";
 import { collectChanges, commitsSince } from "./gitdiff.js";
 import { loadProjectConfig, scanOptions } from "./hooks/config.js";
@@ -81,9 +81,9 @@ server.registerTool(
   async (args) => {
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, limit } = args;
-    // `diff` não diz de que projeto veio: só path e repo acham o `.ds-mcp.json`.
+    // `diff` não diz de que projeto veio: só path e repo acham o `.ds-mcp.json`. Os IDs de regra valem para todos.
     const from = repo ?? path;
-    const scan = from ? scanOptions(loadProjectConfig(resolve(from))) : {};
+    const scan = from ? scanOptions(loadProjectConfig(resolve(from))) : { ruleIds: loadRuleIds() };
     if (repo) {
       const changes = collectChanges(resolve(repo), base);
       if (!changes) return { ...text(`"${repo}" não é um repositório git.`), isError: true };

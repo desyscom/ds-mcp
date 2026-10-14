@@ -40324,6 +40324,18 @@ function loadCatalog() {
     };
   }).sort((a, b) => a.id.localeCompare(b.id));
 }
+var DECLARED_ID = /^- `([A-Z]{2,10}-\d{3})`/;
+var ID = /\b[A-Z]{2,10}-\d{3}\b/g;
+function loadRuleIds(dir = standardsDir) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const file2 of walk(dir))
+    for (const line of readFileSync(file2, "utf8").split(/\r?\n/)) {
+      const declared = DECLARED_ID.exec(line);
+      if (declared) ids.add(declared[1]);
+      else if (line.startsWith("*IDs retirados:*")) for (const m of line.matchAll(ID)) ids.add(m[0]);
+    }
+  return ids;
+}
 function forStacks(docs, stacks, phase) {
   const set2 = /* @__PURE__ */ new Set(["all", ...stacks]);
   return docs.filter((d) => set2.has(d.stack) && (!phase || d.phases.includes(phase)));
@@ -40444,10 +40456,14 @@ function ticketKey(ignore = []) {
   const key = ignore.join("|");
   let re = ticketKeyCache.get(key);
   if (!re) {
-    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`, "g");
     ticketKeyCache.set(key, re);
   }
   return re;
+}
+function hasTicketKey(text2, opts) {
+  for (const m of text2.matchAll(ticketKey(opts.ticketKeyIgnore))) if (!opts.ruleIds?.has(m[0])) return true;
+  return false;
 }
 var decisionIdCache = /* @__PURE__ */ new Map();
 function decisionId(prefixes) {
@@ -40476,7 +40492,7 @@ var RE = {
 function scanText(text2, kind, opts) {
   const out = [];
   const add = (rule, severity, message) => out.push({ rule, severity, message });
-  const tracker = RE.issueNumber.test(text2) || RE.issueWord.test(text2) || ticketKey(opts.ticketKeyIgnore).test(text2) || RE.tracker.test(text2);
+  const tracker = RE.issueNumber.test(text2) || RE.issueWord.test(text2) || hasTicketKey(text2, opts) || RE.tracker.test(text2);
   if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
   if (RE.discussion.test(text2) || RE.discussionChannel.test(text2)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
   if (kind === "comment") {
@@ -40654,7 +40670,11 @@ var empty = (root) => ({
   invalidDecisionIdPrefixes: [],
   root
 });
-var scanOptions = (cfg) => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
+var scanOptions = (cfg) => ({
+  ticketKeyIgnore: cfg.ticketKeyIgnore,
+  decisionIdPrefixes: cfg.decisionIdPrefixes,
+  ruleIds: loadRuleIds()
+});
 function loadProjectConfig(start) {
   let dir = resolve2(start);
   for (let i = 0; i < 8; i++) {
@@ -40906,7 +40926,7 @@ server.registerTool(
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, limit } = args;
     const from = repo ?? path;
-    const scan = from ? scanOptions(loadProjectConfig(resolve4(from))) : {};
+    const scan = from ? scanOptions(loadProjectConfig(resolve4(from))) : { ruleIds: loadRuleIds() };
     if (repo) {
       const changes = collectChanges(resolve4(repo), base);
       if (!changes) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
