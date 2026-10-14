@@ -177,11 +177,14 @@ Princípios: só linhas **adicionadas** são avaliadas (comentário legado não 
 ```json
 {
   "stacks": ["react", "nestjs"],
-  "disable": [{ "rule": "DOC-004", "reason": "Convenção do time usa TODO(ticket) até migrarmos" }]
+  "disable": [{ "rule": "DOC-004", "reason": "Convenção do time usa TODO(ticket) até migrarmos" }],
+  "ticketKeyIgnore": ["CST", "CFOP"]
 }
 ```
 
 `stacks` alimenta o lembrete do SessionStart. `disable` é a **exceção permanente** (PREC-003): exige `reason` (mín. 10 caracteres); entrada sem motivo, ou no formato antigo `"DOC-004"`, é ignorada e a regra continua ativa. As exceções ativas aparecem, com o motivo, no início de toda sessão.
+
+`ticketKeyIgnore` lista prefixos do domínio que o DOC-004 não deve ler como chave de ticket. A chave de ticket é `LETRAS-número`, com prefixo de 2 a 10 letras maiúsculas (`PROJ-42`); um código como `CST-00` tem o mesmo formato e só o projeto sabe que não é ticket. Cada entrada segue o formato do prefixo (`"CST"`, não `"CST-"` nem `"cst"`); entrada fora dele é ignorada e avisada no SessionStart. A lista solta só o prefixo: `#123`, `issue 12` e as demais chaves continuam bloqueados, o que `disable` do DOC-004 não preserva. Códigos com dígito no prefixo, como as regras de validação do Manual da NF-e (`N12-20`, `ZX02-10`), e os prefixos de norma, algoritmo e máscara de data (`ISO`, `AES`, `MM`…) já não contam como ticket e dispensam a lista. A lista vale no hook e no `check_references` com `path` ou `repo`; com `diff`, a tool não sabe de que projeto veio e usa só a lista embutida.
 
 ### Precedência (`standards/all/precedence.md`)
 

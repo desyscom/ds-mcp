@@ -66,12 +66,24 @@ assert.equal(
 // ---- .ds-mcp.json: disable exige motivo (PREC-003) ----
 const off = mkdtempSync(join(tmpdir(), "ds-hook-off-"));
 writeFileSync(join(off, ".ds-mcp.json"), JSON.stringify({ disable: [{ rule: "DOC-004", reason: "Convenção do time usa TODO(ticket)" }] }));
+let s;
 const BAD = { file_path: "src/a.ts", content: "// Corrige issue #481\nconst a = 1;" };
 assert.equal(pre("Write", BAD, off), ""); // exceção válida: desligada
 
 const noReason = mkdtempSync(join(tmpdir(), "ds-hook-noreason-"));
 writeFileSync(join(noReason, ".ds-mcp.json"), JSON.stringify({ disable: ["DOC-004", { rule: "DOC-004" }, { rule: "DOC-004", reason: "curto" }] }));
 assert.equal(specific(pre("Write", BAD, noReason)).permissionDecision, "deny"); // sem motivo: regra continua ativa
+
+// ---- .ds-mcp.json: ticketKeyIgnore solta o código do domínio, não a regra ----
+const codes = mkdtempSync(join(tmpdir(), "ds-hook-codes-"));
+writeFileSync(join(codes, ".ds-mcp.json"), JSON.stringify({ ticketKeyIgnore: ["CST", "cst"] }));
+const CST = { file_path: "src/a.ts", content: "/** Usa o CST-00 na saída. */\nconst a = 1;" };
+assert.equal(specific(pre("Write", CST)).permissionDecision, "deny"); // sem a lista, parece ticket
+assert.equal(pre("Write", CST, codes), "");
+assert.equal(specific(pre("Write", BAD, codes)).permissionDecision, "deny"); // issue continua bloqueada
+s = run("session-start", { cwd: codes });
+assert.match(s, /ticketKeyIgnore\): CST/);
+assert.match(s, /"cst": IGNORADO/);
 
 // ---- PREC-003: o agente não edita a própria exceção nem desliga hooks ----
 assert.equal(specific(pre("Write", { file_path: ".ds-mcp.json", content: '{"disable":[]}' })).permissionDecision, "ask");
@@ -87,7 +99,7 @@ assert.equal(run("evento-inexistente", {}), "");
 assert.equal(run("pre-tool-use", {}), "");
 
 // ---- SessionStart: texto simples, com as stacks do projeto ----
-let s = run("session-start", { hook_event_name: "SessionStart", cwd: proj, source: "startup" });
+s = run("session-start", { hook_event_name: "SessionStart", cwd: proj, source: "startup" });
 assert.match(s, /react, nestjs/);
 assert.match(s, /get_guardrails/);
 assert.ok(s.length < 2500, "o lembrete deve ser curto");
@@ -135,5 +147,5 @@ b = json(stop("commit"));
 assert.match(b.reason, /DOC-004/);
 assert.match(b.reason, /b\.ts:1/);
 
-for (const d of [proj, off, noReason, repo]) rmSync(d, { recursive: true, force: true });
+for (const d of [proj, off, noReason, codes, repo]) rmSync(d, { recursive: true, force: true });
 console.log(`hooks: ${n} execuções ok`);

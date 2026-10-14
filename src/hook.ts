@@ -11,6 +11,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { loadProjectConfig, type ProjectConfig } from "./hooks/config.js";
 import { evaluateAddedLines, evaluateBash, evaluateRead, evaluateWrite, isSensitivePath, type Violation } from "./hooks/policy.js";
 import { collectChanges, git } from "./gitdiff.js";
+import type { ScanOptions } from "./references.js";
 
 // ---------- helpers ----------
 const MAX_READ = 1024 * 1024;
@@ -27,7 +28,7 @@ function applyConfig(vs: Violation[], cfg: ProjectConfig): Violation[] {
 // ---------- PreToolUse ----------
 interface Edit { old_string?: string; new_string?: string }
 
-function evaluateTool(input: any, cwd: string, root: string): Violation[] {
+function evaluateTool(input: any, cwd: string, root: string, scan: ScanOptions): Violation[] {
   const ti = input.tool_input ?? {};
   const abs = (p: string) => (isAbsolute(p) ? p : resolve(cwd, p));
   switch (input.tool_name) {
@@ -42,13 +43,13 @@ function evaluateTool(input: any, cwd: string, root: string): Violation[] {
     }
     case "Write": {
       const path = abs(String(ti.file_path ?? ""));
-      return evaluateWrite({ path, before: readText(path), after: String(ti.content ?? ""), root });
+      return evaluateWrite({ path, before: readText(path), after: String(ti.content ?? ""), root, scan });
     }
     case "Edit":
     case "MultiEdit": {
       const path = abs(String(ti.file_path ?? ""));
       const edits: Edit[] = Array.isArray(ti.edits) ? ti.edits : [{ old_string: ti.old_string, new_string: ti.new_string }];
-      return edits.flatMap((e) => evaluateWrite({ path, before: String(e.old_string ?? ""), after: String(e.new_string ?? ""), root }));
+      return edits.flatMap((e) => evaluateWrite({ path, before: String(e.old_string ?? ""), after: String(e.new_string ?? ""), root, scan }));
     }
     default:
       return [];
@@ -56,7 +57,7 @@ function evaluateTool(input: any, cwd: string, root: string): Violation[] {
 }
 
 function preToolUse(input: any, cfg: ProjectConfig, cwd: string) {
-  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd), cfg);
+  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, { ticketKeyIgnore: cfg.ticketKeyIgnore }), cfg);
   const deny = vs.filter((x) => x.level === "deny");
   const ask = vs.filter((x) => x.level === "ask");
   const warn = vs.filter((x) => x.level === "warn");
@@ -100,7 +101,7 @@ function stopGate(input: any, cfg: ProjectConfig, cwd: string) {
   const root = cfg.root ?? cwd;
   const found: Violation[] = [];
 
-  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join(changes.gitRoot, file), lines, root));
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join(changes.gitRoot, file), lines, root, { ticketKeyIgnore: cfg.ticketKeyIgnore }));
   // SEC-003: dado sensível versionável (modificado ou não ignorado pelo git)
   for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" é dado sensível e está versionável (SEC-003). Remova do índice / adicione ao .gitignore.` });
@@ -130,6 +131,8 @@ function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
   const exceptions = [
     ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
     ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigatório, mín. 10 caracteres); a regra continua ativa`),
+    ...(cfg.ticketKeyIgnore.length ? [`  - prefixos que não são ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : []),
+    ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo é de 2 a 10 letras maiúsculas)`),
   ];
   process.stdout.write(
     [
