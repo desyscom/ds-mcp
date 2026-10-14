@@ -1,5 +1,5 @@
 {
-  "modules": ["./merge-clean.tsx"],
+  "modules": ["./merge-clean.ts"],
   "hooks": {
     "SessionStart": [
       {
