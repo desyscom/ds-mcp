@@ -115,6 +115,12 @@ const RE = {
   url: /https?:\/\/\S+/,
 };
 
+/**
+ * Trecho de código inline com mais que o ID mostra o formato de uma referência, não a cita. O ID sozinho entre crases
+ * continua sendo citação: o projeto que escreve as citações assim não perde o alerta nem a contagem de propagação.
+ */
+const withoutFormatExamples = (text: string) => text.replace(/`([^`]*)`/g, (span, inner: string) => (/^ADR[- ]?\d+$/i.test(inner.trim()) ? span : ""));
+
 function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Omit<Finding, "file" | "line" | "snippet">[] {
   const out: Omit<Finding, "file" | "line" | "snippet">[] = [];
   const add = (rule: string, severity: Severity, message: string) => out.push({ rule, severity, message });
@@ -130,7 +136,7 @@ function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Om
       if (withRef) add("DOC-004", "error", `${todo[1]} com referência — pendência vai para o relatório/issue`);
       else add("SCOPE-001", "warn", `${todo[1]} no código — registre como sugestão no relatório; limitação conhecida vira comentário descritivo`);
     }
-    if (RE.adr.test(text)) add("DOC-005", "warn", "referência a ADR — só se for decisão/restrição não óbvia a preservar (DOC-003/005); explique localmente (DOC-002)");
+    if (RE.adr.test(withoutFormatExamples(text))) add("DOC-005", "warn", "referência a ADR — só se for decisão/restrição não óbvia a preservar (DOC-003/005); explique localmente (DOC-002)");
     if (RE.spec.test(text)) add("DOC-003", "warn", "referência normativa/spec — confirme que se enquadra em DOC-003");
     if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em comentário — prefira ID estável da fonte canônica");
     // O ADR qualifica qualquer ID da linha, na forma que o projeto usar: `ADR-35 M8`, `D5 do ADR-12`, `ADR plataforma-29, D5`.

@@ -116,6 +116,20 @@ for (const t of [
   "Alinhado na call de ontem.",
 ]) fires(t);
 
+// ---- referência a ADR: exemplo de formato entre crases não cita; o ID sozinho entre crases cita ----
+const citesAdr = (text) => rules(text).includes("DOC-005/warn");
+for (const t of [
+  "O ADR qualifica qualquer ID da linha, na forma que o projeto usar: `ADR-35 M8`, `D5 do ADR-12`, `ADR plataforma-29, D5`.",
+  "Aceita a forma `ADR-0035 M8` na mesma referência.",
+]) {
+  n++;
+  assert.ok(!citesAdr(t), `não deveria alertar referência a ADR: ${t}`);
+}
+for (const t of ["Não alterar para execução síncrona sem revisar `ADR-0012`.", "Não alterar sem revisar ADR-012.", "Processa fora da requisição (ADR-12); o formato é `X-1 Y`."]) {
+  n++;
+  assert.ok(citesAdr(t), `deveria alertar referência a ADR: ${t}`);
+}
+
 // ---- vocabulário: "ramo", "árvore" e "acessório" são português legítimo ----
 const lang = createLanguageScanner(process.cwd());
 const avoided = (text) => lang.scan("a.ts", [{ n: 1, text: c(text) }]).filter((f) => f.rule === "LANG-002");
