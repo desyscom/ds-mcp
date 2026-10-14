@@ -190,11 +190,17 @@ const LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*no
 const DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 
 export function evaluateWrite(input: WriteInput): Violation[] {
-  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan);
+  const source = input.after.split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
+  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan, source);
 }
 
-/** Avalia só as linhas adicionadas a um arquivo (usado por Write/Edit e pelo gate do Stop, que lê o diff). */
-export function evaluateAddedLines(path: string, added: { n: number; text: string }[], root?: string, scan: ScanOptions = {}): Violation[] {
+/**
+ * Avalia só as linhas adicionadas a um arquivo (usado por Write/Edit e pelo gate do Stop, que lê o diff).
+ * `source` é o texto de onde `added` saiu, para o estado do bloco de comentário: o conteúdo do Write ou o `new_string`
+ * do Edit. No Edit, linha nova dentro de um bloco aberto fora do trecho editado passa sem ser lida como comentário;
+ * no Stop, sem `source`, o bloco só segue entre linhas adicionadas consecutivas.
+ */
+export function evaluateAddedLines(path: string, added: { n: number; text: string }[], root?: string, scan: ScanOptions = {}, source = added): Violation[] {
   const out: Violation[] = [];
   const file = basename(path);
   const ext = extname(path);
@@ -255,10 +261,10 @@ export function evaluateAddedLines(path: string, added: { n: number; text: strin
       }
 
   // DOC-*, SCOPE-001: referências indevidas em comentários (erros bloqueiam; alertas só informam)
-  for (const f of scanLines(path, added, ext, scan)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of scanLines(path, added, ext, scan, source)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
 
   // LANG-*: heurístico, nunca bloqueia
   const lang = createLanguageScanner(root ?? path);
-  for (const f of lang.scan(path, added)) out.push(v(f.rule, "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of lang.scan(path, added, source)) out.push(v(f.rule, "warn", `${file}:${f.line} ${f.message}`));
   return out;
 }

@@ -172,6 +172,8 @@ Orientar não basta: os hooks aplicam o que é determinístico. Código em `src/
 
 Princípios: só linhas **adicionadas** são avaliadas (comentário legado não bloqueia, DOC-012); heurísticas (idioma) nunca bloqueiam; erro interno do hook **nunca** trava o agente (fail-open, exit 0).
 
+O que conta como comentário: `//`, linha que começa com `*` e bloco aberto por `/*` no início da linha ou depois de espaço, `{`, `(`, `;` ou `,`, o que inclui o `{/* */}` do JSX. O bloco segue nas linhas seguintes até o `*/`, e a continuação sem `*` também é lida. No `PreToolUse`, o estado do bloco vem do conteúdo inteiro do Write e do `new_string` do Edit; no `Stop` e no `check_references` com `diff` ou `repo`, só passa entre linhas adicionadas consecutivas. **Lacuna conhecida:** linha nova dentro de um bloco aberto fora do que foi escrito (um Edit no meio de um comentário longo, uma linha somada a um bloco antigo) não é lida como comentário.
+
 ### Configuração por projeto: `.ds-mcp.json`
 
 ```json

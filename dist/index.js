@@ -40393,19 +40393,53 @@ var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", "
 var HASH_EXT = /* @__PURE__ */ new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", "dist", "build", ".git", ".next", "coverage", ".turbo"]);
 var MAX_FILE_BYTES = 512 * 1024;
-function commentText(line, ext) {
-  const t = line.trim();
+var SLASH_OPEN = /(?<!:)\/\/|(?<![^\s{(;,])\/\*/g;
+function slashComment(line, open2) {
+  if (!open2 && /^\s*\*/.test(line)) return { text: line.trim(), open: false };
+  const parts = [];
+  let start = 0;
+  let from = 0;
+  while (from < line.length) {
+    if (open2) {
+      const end = line.indexOf("*/", from);
+      parts.push(line.slice(start, end < 0 ? void 0 : end + 2));
+      if (end < 0) break;
+      open2 = false;
+      from = end + 2;
+      continue;
+    }
+    SLASH_OPEN.lastIndex = from;
+    const m = SLASH_OPEN.exec(line);
+    if (!m) break;
+    if (m[0] === "//") {
+      parts.push(line.slice(m.index + 2));
+      break;
+    }
+    open2 = true;
+    start = m.index;
+    from = m.index + 2;
+  }
+  return { text: parts.length ? parts.join(" ") : null, open: open2 };
+}
+function commentTexts(lines, ext) {
+  const out = /* @__PURE__ */ new Map();
   if (SLASH_EXT.has(ext)) {
-    if (/^(\/\*|\*)/.test(t)) return t;
-    const m = /(?<!:)\/\/(.*)$/.exec(line);
-    return m ? m[1] : null;
+    let open2 = false;
+    let prev = Number.NaN;
+    for (const { n, text: text2 } of lines) {
+      const c = slashComment(text2, open2 && n === prev + 1);
+      open2 = c.open;
+      prev = n;
+      if (c.text !== null) out.set(n, c.text);
+    }
+  } else if (HASH_EXT.has(ext)) {
+    for (const { n, text: text2 } of lines) {
+      if (text2.trim().startsWith("#!")) continue;
+      const m = /(?:^|\s)#(.*)$/.exec(text2);
+      if (m) out.set(n, m[1]);
+    }
   }
-  if (HASH_EXT.has(ext)) {
-    if (t.startsWith("#!")) return null;
-    const m = /(?:^|\s)#(.*)$/.exec(line);
-    return m ? m[1] : null;
-  }
-  return null;
+  return out;
 }
 function testTitle(line) {
   const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
@@ -40511,13 +40545,14 @@ function scanText(text2, kind, opts) {
   }
   return out;
 }
-function scanLines(file2, lines, ext, opts = {}) {
+function scanLines(file2, lines, ext, opts = {}, source = lines) {
   const found = [];
   const seen = /* @__PURE__ */ new Set();
+  const comments = commentTexts(source, ext);
   for (const { n, text: text2 } of lines) {
     const targets = [];
-    const c = commentText(text2, ext);
-    if (c !== null) targets.push({ s: c, kind: "comment" });
+    const c = comments.get(n);
+    if (c !== void 0) targets.push({ s: c, kind: "comment" });
     const t = testTitle(text2);
     if (t !== null) targets.push({ s: t, kind: "test" });
     for (const { s, kind } of targets) {
@@ -40784,9 +40819,10 @@ function looksEnglish(text2) {
   const pt = words.filter((w) => PT.has(w)).length;
   return en >= 2 && en > pt;
 }
-function scanLines2(file2, lines, ext, avoid) {
+function scanLines2(file2, lines, ext, avoid, source = lines) {
   const out = [];
   const isMd = ext === ".md";
+  const comments = isMd ? /* @__PURE__ */ new Map() : commentTexts(source, ext);
   let inFence = false;
   for (const { n, text: text2 } of lines) {
     let prose = null;
@@ -40797,7 +40833,7 @@ function scanLines2(file2, lines, ext, avoid) {
       }
       if (!inFence && !/^\s*\|?\s*:?-{3,}/.test(text2)) prose = text2;
     } else {
-      prose = commentText(text2, ext) ?? testTitle(text2);
+      prose = comments.get(n) ?? testTitle(text2);
     }
     if (prose === null) continue;
     const clean = stripCode(prose);
@@ -40824,7 +40860,8 @@ function createLanguageScanner(projectStart) {
   return {
     projectGlossary,
     supported,
-    scan: (file2, lines) => supported(file2) ? scanLines2(file2, lines, extname2(file2), avoid) : []
+    /** `source`: o texto inteiro de onde `lines` saiu, para o estado do bloco de comentário. */
+    scan: (file2, lines, source = lines) => supported(file2) ? scanLines2(file2, lines, extname2(file2), avoid, source) : []
   };
 }
 function checkLanguage(input2) {

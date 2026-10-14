@@ -3574,19 +3574,53 @@ function loadRuleIds(dir = standardsDir) {
 var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
 var HASH_EXT = /* @__PURE__ */ new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
 var MAX_FILE_BYTES = 512 * 1024;
-function commentText(line, ext) {
-  const t = line.trim();
+var SLASH_OPEN = /(?<!:)\/\/|(?<![^\s{(;,])\/\*/g;
+function slashComment(line, open) {
+  if (!open && /^\s*\*/.test(line)) return { text: line.trim(), open: false };
+  const parts = [];
+  let start = 0;
+  let from = 0;
+  while (from < line.length) {
+    if (open) {
+      const end = line.indexOf("*/", from);
+      parts.push(line.slice(start, end < 0 ? void 0 : end + 2));
+      if (end < 0) break;
+      open = false;
+      from = end + 2;
+      continue;
+    }
+    SLASH_OPEN.lastIndex = from;
+    const m = SLASH_OPEN.exec(line);
+    if (!m) break;
+    if (m[0] === "//") {
+      parts.push(line.slice(m.index + 2));
+      break;
+    }
+    open = true;
+    start = m.index;
+    from = m.index + 2;
+  }
+  return { text: parts.length ? parts.join(" ") : null, open };
+}
+function commentTexts(lines, ext) {
+  const out = /* @__PURE__ */ new Map();
   if (SLASH_EXT.has(ext)) {
-    if (/^(\/\*|\*)/.test(t)) return t;
-    const m = /(?<!:)\/\/(.*)$/.exec(line);
-    return m ? m[1] : null;
+    let open = false;
+    let prev = Number.NaN;
+    for (const { n, text } of lines) {
+      const c = slashComment(text, open && n === prev + 1);
+      open = c.open;
+      prev = n;
+      if (c.text !== null) out.set(n, c.text);
+    }
+  } else if (HASH_EXT.has(ext)) {
+    for (const { n, text } of lines) {
+      if (text.trim().startsWith("#!")) continue;
+      const m = /(?:^|\s)#(.*)$/.exec(text);
+      if (m) out.set(n, m[1]);
+    }
   }
-  if (HASH_EXT.has(ext)) {
-    if (t.startsWith("#!")) return null;
-    const m = /(?:^|\s)#(.*)$/.exec(line);
-    return m ? m[1] : null;
-  }
-  return null;
+  return out;
 }
 function testTitle(line) {
   const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
@@ -3692,13 +3726,14 @@ function scanText(text, kind, opts) {
   }
   return out;
 }
-function scanLines(file, lines, ext, opts = {}) {
+function scanLines(file, lines, ext, opts = {}, source = lines) {
   const found = [];
   const seen = /* @__PURE__ */ new Set();
+  const comments = commentTexts(source, ext);
   for (const { n, text } of lines) {
     const targets = [];
-    const c = commentText(text, ext);
-    if (c !== null) targets.push({ s: c, kind: "comment" });
+    const c = comments.get(n);
+    if (c !== void 0) targets.push({ s: c, kind: "comment" });
     const t = testTitle(text);
     if (t !== null) targets.push({ s: t, kind: "test" });
     for (const { s, kind } of targets) {
@@ -3895,9 +3930,10 @@ function looksEnglish(text) {
   const pt = words.filter((w) => PT.has(w)).length;
   return en >= 2 && en > pt;
 }
-function scanLines2(file, lines, ext, avoid) {
+function scanLines2(file, lines, ext, avoid, source = lines) {
   const out = [];
   const isMd = ext === ".md";
+  const comments = isMd ? /* @__PURE__ */ new Map() : commentTexts(source, ext);
   let inFence = false;
   for (const { n, text } of lines) {
     let prose = null;
@@ -3908,7 +3944,7 @@ function scanLines2(file, lines, ext, avoid) {
       }
       if (!inFence && !/^\s*\|?\s*:?-{3,}/.test(text)) prose = text;
     } else {
-      prose = commentText(text, ext) ?? testTitle(text);
+      prose = comments.get(n) ?? testTitle(text);
     }
     if (prose === null) continue;
     const clean = stripCode(prose);
@@ -3935,7 +3971,8 @@ function createLanguageScanner(projectStart) {
   return {
     projectGlossary,
     supported,
-    scan: (file, lines) => supported(file) ? scanLines2(file, lines, extname(file), avoid) : []
+    /** `source`: o texto inteiro de onde `lines` saiu, para o estado do bloco de comentário. */
+    scan: (file, lines, source = lines) => supported(file) ? scanLines2(file, lines, extname(file), avoid, source) : []
   };
 }
 
@@ -4117,9 +4154,10 @@ var TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|tes
 var LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
 var DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 function evaluateWrite(input) {
-  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan);
+  const source = input.after.split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
+  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan, source);
 }
-function evaluateAddedLines(path, added, root, scan = {}) {
+function evaluateAddedLines(path, added, root, scan = {}, source = added) {
   const out = [];
   const file = basename2(path);
   const ext = extname2(path);
@@ -4169,9 +4207,9 @@ function evaluateAddedLines(path, added, root, scan = {}) {
         break;
       }
   }
-  for (const f of scanLines(path, added, ext, scan)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of scanLines(path, added, ext, scan, source)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
   const lang = createLanguageScanner(root ?? path);
-  for (const f of lang.scan(path, added)) out.push(v(f.rule, "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of lang.scan(path, added, source)) out.push(v(f.rule, "warn", `${file}:${f.line} ${f.message}`));
   return out;
 }
 

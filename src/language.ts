@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { standardsDir } from "./catalog.js";
 import { collectChanges } from "./gitdiff.js";
-import { commentText, HASH_EXT, MAX_FILE_BYTES, parseDiff, SLASH_EXT, testTitle, walk, type Finding } from "./references.js";
+import { commentTexts, HASH_EXT, MAX_FILE_BYTES, parseDiff, SLASH_EXT, testTitle, walk, type Finding } from "./references.js";
 
 interface Entry {
   term: string;
@@ -104,9 +104,10 @@ function looksEnglish(text: string): boolean {
   return en >= 2 && en > pt;
 }
 
-function scanLines(file: string, lines: { n: number; text: string }[], ext: string, avoid: { re: RegExp; entry: Entry; word: string }[]): Finding[] {
+function scanLines(file: string, lines: { n: number; text: string }[], ext: string, avoid: { re: RegExp; entry: Entry; word: string }[], source = lines): Finding[] {
   const out: Finding[] = [];
   const isMd = ext === ".md";
+  const comments = isMd ? new Map<number, string>() : commentTexts(source, ext);
   let inFence = false;
   for (const { n, text } of lines) {
     let prose: string | null = null;
@@ -114,7 +115,7 @@ function scanLines(file: string, lines: { n: number; text: string }[], ext: stri
       if (/^\s*(```|~~~)/.test(text)) { inFence = !inFence; continue; }
       if (!inFence && !/^\s*\|?\s*:?-{3,}/.test(text)) prose = text;
     } else {
-      prose = commentText(text, ext) ?? testTitle(text);
+      prose = comments.get(n) ?? testTitle(text);
     }
     if (prose === null) continue;
     const clean = stripCode(prose);
@@ -144,8 +145,9 @@ export function createLanguageScanner(projectStart?: string) {
   return {
     projectGlossary,
     supported,
-    scan: (file: string, lines: { n: number; text: string }[]): Finding[] =>
-      supported(file) ? scanLines(file, lines, extname(file), avoid) : [],
+    /** `source`: o texto inteiro de onde `lines` saiu, para o estado do bloco de comentário. */
+    scan: (file: string, lines: { n: number; text: string }[], source = lines): Finding[] =>
+      supported(file) ? scanLines(file, lines, extname(file), avoid, source) : [],
   };
 }
 

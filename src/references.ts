@@ -17,20 +17,66 @@ export const HASH_EXT = new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"])
 export const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", ".next", "coverage", ".turbo"]);
 export const MAX_FILE_BYTES = 512 * 1024;
 
-/** Texto de comentário da linha (heurística sem estado: vale igual para arquivo e diff). */
-export function commentText(line: string, ext: string): string | null {
-  const t = line.trim();
+/**
+ * Abertura de comentário: `//` fora de URL, ou `/*` no início da linha ou depois de espaço, `{`, `(`, `;` ou `,`. O
+ * `{` cobre o comentário JSX. A exigência sobre o caractere anterior deixa de fora glob (`src/**`), string (`"/*"`) e
+ * regex com barra escapada; string com espaço antes do `/*` ainda abre bloco, o mesmo risco que o `//` já corre.
+ */
+const SLASH_OPEN = /(?<!:)\/\/|(?<![^\s{(;,])\/\*/g;
+
+/** Trechos de comentário de uma linha em linguagem de barra. `open` diz se a linha começa dentro de um bloco. */
+function slashComment(line: string, open: boolean): { text: string | null; open: boolean } {
+  // linha que começa com `*` fora de bloco conhecido: continuação cuja abertura ficou fora das linhas avaliadas
+  if (!open && /^\s*\*/.test(line)) return { text: line.trim(), open: false };
+  const parts: string[] = [];
+  let start = 0; // início do bloco em curso
+  let from = 0; // onde procurar o fecho ou a próxima abertura
+  while (from < line.length) {
+    if (open) {
+      const end = line.indexOf("*/", from);
+      parts.push(line.slice(start, end < 0 ? undefined : end + 2));
+      if (end < 0) break;
+      open = false;
+      from = end + 2;
+      continue;
+    }
+    SLASH_OPEN.lastIndex = from;
+    const m = SLASH_OPEN.exec(line);
+    if (!m) break;
+    if (m[0] === "//") {
+      parts.push(line.slice(m.index + 2));
+      break;
+    }
+    open = true;
+    start = m.index;
+    from = m.index + 2;
+  }
+  return { text: parts.length ? parts.join(" ") : null, open };
+}
+
+/**
+ * Texto de comentário de cada linha, por número. O bloco aberto por `/*` segue nas linhas seguintes enquanto os
+ * números forem consecutivos: num diff, a linha depois de uma lacuna pode ser código, e o estado não atravessa.
+ */
+export function commentTexts(lines: readonly { n: number; text: string }[], ext: string): Map<number, string> {
+  const out = new Map<number, string>();
   if (SLASH_EXT.has(ext)) {
-    if (/^(\/\*|\*)/.test(t)) return t;
-    const m = /(?<!:)\/\/(.*)$/.exec(line);
-    return m ? m[1] : null;
+    let open = false;
+    let prev = Number.NaN;
+    for (const { n, text } of lines) {
+      const c = slashComment(text, open && n === prev + 1);
+      open = c.open;
+      prev = n;
+      if (c.text !== null) out.set(n, c.text);
+    }
+  } else if (HASH_EXT.has(ext)) {
+    for (const { n, text } of lines) {
+      if (text.trim().startsWith("#!")) continue;
+      const m = /(?:^|\s)#(.*)$/.exec(text);
+      if (m) out.set(n, m[1]);
+    }
   }
-  if (HASH_EXT.has(ext)) {
-    if (t.startsWith("#!")) return null;
-    const m = /(?:^|\s)#(.*)$/.exec(line);
-    return m ? m[1] : null;
-  }
-  return null;
+  return out;
 }
 
 /** Título de teste (describe/it/test): DOC-004 vale para nomes de teste. */
@@ -146,13 +192,18 @@ function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Om
   return out;
 }
 
-export function scanLines(file: string, lines: { n: number; text: string }[], ext: string, opts: ScanOptions = {}): Finding[] {
+/**
+ * `source` é o texto de onde `lines` saiu, inteiro: o hook avalia só as linhas adicionadas, que vêm com lacunas, e o
+ * bloco aberto numa linha que já existia continua valendo para as novas.
+ */
+export function scanLines(file: string, lines: { n: number; text: string }[], ext: string, opts: ScanOptions = {}, source = lines): Finding[] {
   const found: Finding[] = [];
   const seen = new Set<string>();
+  const comments = commentTexts(source, ext);
   for (const { n, text } of lines) {
     const targets: { s: string; kind: "comment" | "test" }[] = [];
-    const c = commentText(text, ext);
-    if (c !== null) targets.push({ s: c, kind: "comment" });
+    const c = comments.get(n);
+    if (c !== undefined) targets.push({ s: c, kind: "comment" });
     const t = testTitle(text);
     if (t !== null) targets.push({ s: t, kind: "test" });
     for (const { s, kind } of targets) {

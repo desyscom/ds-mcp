@@ -130,6 +130,36 @@ for (const t of ["Não alterar para execução síncrona sem revisar `ADR-0012`.
   assert.ok(citesAdr(t), `deveria alertar referência a ADR: ${t}`);
 }
 
+// ---- forma do comentário: JSX, bloco depois de código e continuação de bloco sem `*` ----
+// As aberturas são montadas em tempo de execução: escritas literalmente, abririam um bloco neste arquivo.
+const JSX = "{/" + "*";
+const BLOCO = "/" + "*";
+const CODIGO = 'const id = "#12";';
+const numbered = (...texts) => texts.map((text, i) => ({ n: i + 1, text }));
+const cited = (ext, lines) => scanLines(`a${ext}`, lines, ext).filter((f) => f.rule === "DOC-004").map((f) => f.line);
+const expectCited = (label, ext, lines, expected) => {
+  n++;
+  assert.deepEqual(cited(ext, lines), expected, `${label}: DOC-004 nas linhas ${JSON.stringify(expected)}`);
+};
+expectCited("JSX no início da linha", ".tsx", numbered(`      ${JSX} rota nova (#549) */}`), [1]);
+expectCited("JSX depois de código", ".tsx", numbered(`  <div>${JSX} #45 */}</div>`), [1]);
+expectCited("bloco depois de código", ".ts", numbered(`const x = 1; ${BLOCO} ver #88 */`), [1]);
+expectCited("continuação de JSX", ".tsx", numbered(
+  `      ${JSX} Não é um Campo: a estrutura é a de`,
+  "          lá (#642) — o label associado, e a dica fora dele.",
+  "          Envolver o input com o label esconderia a dica. */}",
+  "      <input />",
+), [2]);
+expectCited("continuação de bloco", ".ts", numbered(BLOCO, "   decisão 6 do #620: o contrato nunca rebaixa emitente.", "*/"), [2]);
+expectCited("continuação de bloco em CSS", ".css", numbered(BLOCO, "   o orçamento de espera da suíte (#701) não cobre a animação.", "*/"), [2]);
+expectCited("código depois do fecho", ".ts", numbered(BLOCO, "   texto", "*/", CODIGO), []);
+expectCited("código depois do fecho na mesma linha", ".ts", numbered(`${BLOCO} texto`, `fim */ ${CODIGO}`), []);
+expectCited("lacuna interrompe o bloco", ".ts", [{ n: 1, text: BLOCO }, { n: 3, text: "   decisão do #620" }], []);
+expectCited("glob em string não abre bloco", ".ts", numbered('const g = "src/**/*.ts";', CODIGO), []);
+expectCited("barra-asterisco em string não abre bloco", ".ts", numbered(`const p = "${BLOCO}";`, CODIGO), []);
+expectCited("barra-asterisco em regex não abre bloco", ".ts", numbered("const re = /a\\/*b/;", CODIGO), []);
+expectCited("barra-asterisco dentro de comentário de linha não abre bloco", ".ts", numbered(`/${"/"} o padrão ${BLOCO} fica aqui`, CODIGO), []);
+
 // ---- vocabulário: "ramo", "árvore" e "acessório" são português legítimo ----
 const lang = createLanguageScanner(process.cwd());
 const avoided = (text) => lang.scan("a.ts", [{ n: 1, text: c(text) }]).filter((f) => f.rule === "LANG-002");
@@ -143,5 +173,10 @@ for (const t of [
 }
 n++;
 assert.equal(avoided("Roda o teste de fumaça antes do deploy.").length, 1); // tradução literal continua avisada
+n++;
+assert.ok(
+  lang.scan("a.tsx", numbered(`${JSX} This component renders the list of the items`, "for the user when the page loads */}")).some((f) => f.rule === "LANG-001" && f.line === 2),
+  "texto em inglês na continuação de JSX é avisado",
+);
 
 console.log(`references: ${n} casos ok`);

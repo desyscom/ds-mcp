@@ -68,6 +68,20 @@ w(".claude/settings.json", "", '{"disableAllHooks": true}', "ask", "PREC-003");
 w(".claude/settings.json", "", '{"model": "haiku"}', "ok");
 w("src/a.ts", "", "// Roda o teste de fumaça antes do deploy.\nconst a = 1;", "warn", "LANG-002");
 
+// Comentário JSX e continuação de bloco. A abertura é montada em tempo de execução: escrita literalmente, abriria um
+// bloco neste arquivo.
+const JSX = "{/" + "*";
+const BLOCO = "/" + "*";
+const citacao = "   decisão 6 do #620: o contrato nunca rebaixa emitente.";
+w("src/App.tsx", "", `<div>\n  ${JSX} rota nova (#549) */}\n</div>`, "deny", "DOC-004");
+w("src/App.tsx", "", `<div>\n  ${JSX} A rota fica fora do painel:\n     ver #549. */}\n</div>`, "deny", "DOC-004");
+// a linha em branco sai das adicionadas, mas o bloco continua aberto
+w("src/a.ts", "", `${BLOCO}\n\n${citacao}\n*/\nconst a = 1;`, "deny", "DOC-004");
+// a abertura já existia no arquivo e não conta como adicionada, mas o bloco continua aberto
+w("src/a.ts", `${BLOCO}\n*/`, `${BLOCO}\n${citacao}\n*/`, "deny", "DOC-004");
+// o bloco legado não conta: só a linha de código foi adicionada
+w("src/a.ts", `${BLOCO}\n${citacao}\n*/`, `${BLOCO}\n${citacao}\n*/\nconst a = 2;`, "ok");
+
 // ---- mensagens de commit (COMMIT-001..003) ----
 const HD = (msg) => `git commit -m "$(cat <<'EOF'\n${msg}\nEOF\n)"`;
 bash('git commit -m "feat: adiciona o login"', "ok");
