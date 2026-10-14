@@ -2991,7 +2991,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve4.call(this, root, ref);
+      let _sch = resolve5.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3018,7 +3018,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve4(root, ref) {
+    function resolve5(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3848,7 +3848,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve4(baseURI, relativeURI, options2) {
+    function resolve5(baseURI, relativeURI, options2) {
       const schemelessOptions = options2 ? Object.assign({ scheme: "null" }, options2) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -4217,7 +4217,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve4,
+      resolve: resolve5,
       resolveComponent,
       equal,
       serialize,
@@ -19360,7 +19360,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve4) {
+function isRecursive(inst, stack, resolve5) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -19370,7 +19370,7 @@ function isRecursive(inst, stack, resolve4) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve4);
+      const answer = isRecursive(child, stack, resolve5);
       if (answer > result)
         result = answer;
     }
@@ -19381,7 +19381,7 @@ function isRecursive(inst, stack, resolve4) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve4) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve5) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -19445,7 +19445,7 @@ function isRecursive(inst, stack, resolve4) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve4 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve5 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -19511,15 +19511,15 @@ function bucketFor(state, inst) {
 var handoff;
 var open = [];
 var memo = {
-  alloc(_inst, payload, empty) {
+  alloc(_inst, payload, empty2) {
     const bucket = handoff;
     if (!bucket)
-      return empty;
+      return empty2;
     handoff = void 0;
-    const entry = { value: empty, issues: null };
+    const entry = { value: empty2, issues: null };
     bucket.set(payload.value, entry);
     open.push(entry);
-    return empty;
+    return empty2;
   },
   guard(inst) {
     var _a3;
@@ -37875,7 +37875,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+        await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
         options2?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -37892,7 +37892,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options2) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options2 ?? {};
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -37970,7 +37970,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve4(parseResult.data);
+            resolve5(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -38232,12 +38232,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve4, interval);
+      const timeoutId = setTimeout(resolve5, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -39590,7 +39590,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+      await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -40278,19 +40278,19 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve4();
+        resolve5();
       } else {
-        this._stdout.once("drain", resolve4);
+        this._stdout.once("drain", resolve5);
       }
     });
   }
 };
 
 // src/index.ts
-import { resolve as resolve3 } from "node:path";
+import { resolve as resolve4 } from "node:path";
 
 // src/catalog.ts
 var import_gray_matter = __toESM(require_gray_matter(), 1);
@@ -40399,24 +40399,75 @@ function testTitle(line) {
   const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
   return m ? m[2] : null;
 }
-var NOT_TICKET = "ADR|SPEC|REQ|RN|RF|UTF|ISO|SHA|RFC|CVE|CWE|HTTP|TLS|MD|ES|IEEE|WCAG|ECMA|UTC|GMT|TCP|IPV|X|H|PT|EN";
+var NOT_TICKET = [
+  // normas, formatos e protocolos
+  "ADR",
+  "SPEC",
+  "REQ",
+  "RN",
+  "RF",
+  "UTF",
+  "ISO",
+  "SHA",
+  "RFC",
+  "CVE",
+  "CWE",
+  "HTTP",
+  "TLS",
+  "MD",
+  "ES",
+  "IEEE",
+  "WCAG",
+  "ECMA",
+  "UTC",
+  "GMT",
+  "TCP",
+  "IPV",
+  "PT",
+  "EN",
+  // algoritmos com tamanho de chave
+  "AES",
+  "RSA",
+  "DES",
+  "ECDSA",
+  // máscaras de data e hora seguidas de valor fixo
+  "YYYY",
+  "YY",
+  "MM",
+  "DD",
+  "HH"
+];
+var TICKET_PREFIX = /^[A-Z]{2,10}$/;
+var ticketKeyCache = /* @__PURE__ */ new Map();
+function ticketKey(ignore = []) {
+  const key = ignore.join("|");
+  let re = ticketKeyCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+var SEGUNDO = String.raw`(?<!\b(?:o|um|do|no|ao|pelo|este|esse|seu|nosso)\s)segundo`;
 var RE = {
   issueNumber: /(?:^|[^\w&])#\d{1,6}\b/,
   issueWord: /\b(?:issue|ticket|PR|pull request|merge request|MR|chamado|card)\s*(?:n[ºo°.]?\s*)?#?\d+/i,
-  ticketKey: new RegExp(`\\b(?!(?:${NOT_TICKET})-)[A-Z][A-Z0-9]{1,9}-\\d+\\b`),
   tracker: /(github\.com\/\S+\/(?:issues|pull)\/\d+|atlassian\.net|\bjira\.|linear\.app|gitlab\.\S+\/-\/(?:issues|merge_requests)|_workitems|trello\.com|notion\.so|slack\.com)/i,
-  discussion: /\b(?:conforme|segundo|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|call|slack|teams|whatsapp|e-?mail)\b/i,
+  discussion: new RegExp(String.raw`\b(?:conforme|${SEGUNDO}|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|slack|teams|whatsapp)\b`, "i"),
+  // Os dois canais abaixo são palavras comuns no código (o endereço de um usuário, o local de uma chamada): só
+  // contam colados ao particípio que marca a citação.
+  discussionChannel: /\b(?:combinad[oa]|alinhad[oa]|discutid[oa]|acordad[oa])\s+(?:(?:por|em|via|n[oa]|pel[oa])\s+)?(?:e-?mail|call)\b/i,
   todo: /\b(TODO|FIXME|HACK|XXX)\b(.*)/,
   adr: /\bADR[- ]?(\d+)/i,
   spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
   url: /https?:\/\/\S+/
 };
-function scanText(text2, kind) {
+function scanText(text2, kind, opts) {
   const out = [];
   const add = (rule, severity, message) => out.push({ rule, severity, message });
-  const tracker = RE.issueNumber.test(text2) || RE.issueWord.test(text2) || RE.ticketKey.test(text2) || RE.tracker.test(text2);
+  const tracker = RE.issueNumber.test(text2) || RE.issueWord.test(text2) || ticketKey(opts.ticketKeyIgnore).test(text2) || RE.tracker.test(text2);
   if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
-  if (RE.discussion.test(text2)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
+  if (RE.discussion.test(text2) || RE.discussionChannel.test(text2)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
   if (kind === "comment") {
     const todo = RE.todo.exec(text2);
     if (todo) {
@@ -40430,7 +40481,7 @@ function scanText(text2, kind) {
   }
   return out;
 }
-function scanLines(file2, lines, ext) {
+function scanLines(file2, lines, ext, opts = {}) {
   const found = [];
   const seen = /* @__PURE__ */ new Set();
   for (const { n, text: text2 } of lines) {
@@ -40440,7 +40491,7 @@ function scanLines(file2, lines, ext) {
     const t = testTitle(text2);
     if (t !== null) targets.push({ s: t, kind: "test" });
     for (const { s, kind } of targets) {
-      for (const f of scanText(s, kind)) {
+      for (const f of scanText(s, kind, opts)) {
         const key = `${n}:${f.rule}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -40486,11 +40537,11 @@ function parseDiff(diff) {
   }
   return byFile;
 }
-function checkReferences(input2) {
+function checkReferences(input2, opts = {}) {
   const findings = [];
   if (input2.diff) {
     const byFile = parseDiff(input2.diff);
-    for (const [f, lines] of byFile) findings.push(...scanLines(f, lines, extname(f)));
+    for (const [f, lines] of byFile) findings.push(...scanLines(f, lines, extname(f), opts));
   } else if (input2.path) {
     const root = input2.path;
     const isFile = statSync2(root).isFile();
@@ -40499,14 +40550,14 @@ function checkReferences(input2) {
       if (!SLASH_EXT.has(ext) && !HASH_EXT.has(ext)) continue;
       if (statSync2(file2).size > MAX_FILE_BYTES) continue;
       const lines = readFileSync3(file2, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 }));
-      findings.push(...scanLines(isFile ? file2 : relative2(root, file2), lines, ext));
+      findings.push(...scanLines(isFile ? file2 : relative2(root, file2), lines, ext, opts));
     }
   }
   return [...findings, ...propagation(findings)];
 }
-function checkReferencesFiles(files) {
+function checkReferencesFiles(files, opts = {}) {
   const findings = [];
-  for (const [file2, lines] of files) findings.push(...scanLines(file2, lines, extname(file2)));
+  for (const [file2, lines] of files) findings.push(...scanLines(file2, lines, extname(file2), opts));
   return [...findings, ...propagation(findings)];
 }
 function formatFindings(findings, opts = {}) {
@@ -40576,9 +40627,45 @@ function commitsSince(cwd, base) {
   }
 }
 
+// src/hooks/config.ts
+import { existsSync as existsSync3, readFileSync as readFileSync5 } from "node:fs";
+import { dirname as dirname2, join as join5, resolve as resolve2 } from "node:path";
+var MIN_REASON = 10;
+var empty = (root) => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
+function loadProjectConfig(start) {
+  let dir = resolve2(start);
+  for (let i = 0; i < 8; i++) {
+    const file2 = join5(dir, ".ds-mcp.json");
+    if (existsSync3(file2)) {
+      try {
+        const raw = JSON.parse(readFileSync5(file2, "utf8"));
+        const cfg = empty(dir);
+        cfg.stacks = Array.isArray(raw.stacks) ? raw.stacks.filter((s) => typeof s === "string") : [];
+        for (const d of Array.isArray(raw.disable) ? raw.disable : []) {
+          const rule = typeof d === "string" ? d : typeof d?.rule === "string" ? d.rule : "?";
+          const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
+          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
+          else cfg.invalidDisable.push(rule);
+        }
+        for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
+          if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
+          else cfg.invalidTicketKeyIgnore.push(String(p));
+        }
+        return cfg;
+      } catch {
+        return empty(dir);
+      }
+    }
+    const parent = dirname2(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return empty(null);
+}
+
 // src/language.ts
-import { existsSync as existsSync3, readFileSync as readFileSync5, statSync as statSync4 } from "node:fs";
-import { basename, dirname as dirname2, extname as extname2, join as join5, relative as relative3, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync6, statSync as statSync4 } from "node:fs";
+import { basename, dirname as dirname3, extname as extname2, join as join6, relative as relative3, resolve as resolve3 } from "node:path";
 function parseVocabulary(md) {
   const out = [];
   for (const line of md.split(/\r?\n/)) {
@@ -40608,11 +40695,11 @@ function parseDomainGlossary(md) {
   return out;
 }
 function findUp(start, rel) {
-  let dir = statSync4(start).isFile() ? dirname2(start) : start;
+  let dir = statSync4(start).isFile() ? dirname3(start) : start;
   for (let i = 0; i < 6; i++) {
-    const candidate = join5(dir, rel);
-    if (existsSync3(candidate)) return candidate;
-    const parent = dirname2(dir);
+    const candidate = join6(dir, rel);
+    if (existsSync4(candidate)) return candidate;
+    const parent = dirname3(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -40621,18 +40708,18 @@ function findUp(start, rel) {
 function loadVocabulary(projectStart) {
   const merged = /* @__PURE__ */ new Map();
   const put = (list) => list.forEach((e) => merged.set(e.term, e));
-  const base = join5(standardsDir, "all", "vocabulary.md");
-  if (existsSync3(base)) put(parseVocabulary(readFileSync5(base, "utf8")));
+  const base = join6(standardsDir, "all", "vocabulary.md");
+  if (existsSync4(base)) put(parseVocabulary(readFileSync6(base, "utf8")));
   const sources = [];
-  if (projectStart && existsSync3(projectStart)) {
+  if (projectStart && existsSync4(projectStart)) {
     const domain2 = findUp(projectStart, "GLOSSARY.md");
     if (domain2) {
-      put(parseDomainGlossary(readFileSync5(domain2, "utf8")));
+      put(parseDomainGlossary(readFileSync6(domain2, "utf8")));
       sources.push(domain2);
     }
-    const project = findUp(projectStart, join5("docs", "glossary.md"));
+    const project = findUp(projectStart, join6("docs", "glossary.md"));
     if (project) {
-      put(parseVocabulary(readFileSync5(project, "utf8")));
+      put(parseVocabulary(readFileSync6(project, "utf8")));
       sources.push(project);
     }
   }
@@ -40677,7 +40764,7 @@ function scanLines2(file2, lines, ext, avoid) {
   return out;
 }
 function createLanguageScanner(projectStart) {
-  const { entries, projectGlossary } = loadVocabulary(projectStart ? resolve2(projectStart) : void 0);
+  const { entries, projectGlossary } = loadVocabulary(projectStart ? resolve3(projectStart) : void 0);
   const avoid = entries.flatMap(
     (entry) => entry.avoid.map((word) => ({ entry, word, re: new RegExp(`(?<![\\p{L}\\p{N}_-])${esc2(word)}(?![\\p{L}\\p{N}_-])`, "iu") }))
   );
@@ -40696,16 +40783,16 @@ function checkLanguage(input2) {
   const scanner = createLanguageScanner(input2.root ?? input2.repo ?? input2.path);
   const findings = [];
   if (input2.repo) {
-    const changes = collectChanges(resolve2(input2.repo), input2.base);
+    const changes = collectChanges(resolve3(input2.repo), input2.base);
     if (changes) for (const [file2, lines] of changes.added) findings.push(...scanner.scan(file2, lines));
   } else if (input2.diff) {
     for (const [f, lines] of parseDiff(input2.diff)) findings.push(...scanner.scan(f, lines));
   } else if (input2.path) {
-    const root = resolve2(input2.path);
+    const root = resolve3(input2.path);
     const isFile = statSync4(root).isFile();
     for (const file2 of walk2(root)) {
       if (!scanner.supported(file2) || statSync4(file2).size > MAX_FILE_BYTES) continue;
-      const lines = readFileSync5(file2, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 }));
+      const lines = readFileSync6(file2, "utf8").split(/\r?\n/).map((text2, i) => ({ n: i + 1, text: text2 }));
       findings.push(...scanner.scan(isFile ? file2 : relative3(root, file2), lines));
     }
   }
@@ -40735,14 +40822,14 @@ function evaluateCommitMessage(message, root) {
 }
 
 // src/index.ts
-var server = new McpServer({ name: "ds-mcp", version: "0.1.0" });
+var server = new McpServer({ name: "ds-mcp", version: "0.2.0" });
 var catalog = () => loadCatalog();
 var text = (t) => ({ content: [{ type: "text", text: t }] });
 var render = (d) => `# ${d.title}  \`${d.id}\` (${d.kind})
 
 ${d.body}`;
 var phaseArg = external_exports.enum(["plan", "implement", "review"]);
-var join6 = (docs) => docs.map(render).join("\n\n---\n\n");
+var join7 = (docs) => docs.map(render).join("\n\n---\n\n");
 var stacksArg = external_exports.array(external_exports.string()).describe('Ex.: ["web","devops"]. "all" \xE9 sempre inclu\xEDdo.');
 server.registerTool(
   "list_standards",
@@ -40770,7 +40857,7 @@ server.registerTool(
     inputSchema: { stacks: stacksArg, phase: phaseArg.optional() }
   },
   async ({ stacks, phase }) => text(
-    join6(forStacks(catalog(), stacks, phase).filter((d) => d.kind === "guardrail" || d.kind === "glossary")) || "Sem guardrails."
+    join7(forStacks(catalog(), stacks, phase).filter((d) => d.kind === "guardrail" || d.kind === "glossary")) || "Sem guardrails."
   )
 );
 var sourceArgs = {
@@ -40791,12 +40878,14 @@ server.registerTool(
   async (args) => {
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, limit } = args;
+    const from = repo ?? path;
+    const scan = from ? { ticketKeyIgnore: loadProjectConfig(resolve4(from)).ticketKeyIgnore } : {};
     if (repo) {
-      const changes = collectChanges(resolve3(repo), base);
+      const changes = collectChanges(resolve4(repo), base);
       if (!changes) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
-      return text(formatFindings(checkReferencesFiles(changes.added), { limit }));
+      return text(formatFindings(checkReferencesFiles(changes.added, scan), { limit }));
     }
-    return text(formatFindings(checkReferences({ path: path ? resolve3(path) : void 0, diff }), { limit }));
+    return text(formatFindings(checkReferences({ path: path ? resolve4(path) : void 0, diff }, scan), { limit }));
   }
 );
 server.registerTool(
@@ -40808,7 +40897,7 @@ server.registerTool(
   async (args) => {
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, root, limit } = args;
-    if (repo && !collectChanges(resolve3(repo), base)) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
+    if (repo && !collectChanges(resolve4(repo), base)) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };
     const { findings, projectGlossary } = checkLanguage({ path, diff, root, repo, base });
     const head = `gloss\xE1rios: ${projectGlossary ?? "nenhum (usando s\xF3 o vocabul\xE1rio-base)"}
 
@@ -40826,15 +40915,15 @@ server.registerTool(
     }
   },
   async ({ repo, base }) => {
-    const commits = commitsSince(resolve3(repo), base ?? "HEAD~1");
+    const commits = commitsSince(resolve4(repo), base ?? "HEAD~1");
     if (!commits) return { ...text(`N\xE3o foi poss\xEDvel listar commits de "${base ?? "HEAD~1"}..HEAD" em "${repo}" (n\xE3o \xE9 um reposit\xF3rio git, ou a base n\xE3o existe).`), isError: true };
     if (!commits.length) return text("Nenhum commit na faixa.");
     const rows = commits.flatMap((c) => {
-      const vs = evaluateCommitMessage(c.message, resolve3(repo));
+      const vs = evaluateCommitMessage(c.message, resolve4(repo));
       const subject = c.message.split(/\r?\n/)[0];
       return vs.length ? [`${c.sha.slice(0, 7)} "${subject}"`, ...vs.map((x) => `  ${x.level === "deny" ? "ERRO " : "ALERTA"} ${x.rule}  ${x.message}`)] : [];
     });
-    const bad = commits.filter((c) => evaluateCommitMessage(c.message, resolve3(repo)).length).length;
+    const bad = commits.filter((c) => evaluateCommitMessage(c.message, resolve4(repo)).length).length;
     return text(`${commits.length} commit(s) avaliados, ${bad} com problemas.${rows.length ? `
 
 ${rows.join("\n")}` : ""}`);
@@ -40847,7 +40936,7 @@ server.registerTool(
     inputSchema: { path: external_exports.string().describe("Caminho do projeto"), stacks: stacksArg }
   },
   async ({ path, stacks }) => {
-    const results = checkProject(resolve3(path), stacks);
+    const results = checkProject(resolve4(path), stacks);
     const failed = results.filter((r) => !r.ok);
     const lines = results.map((r) => `${r.ok ? "PASS" : "FAIL"}  ${r.message}  \u2192 ${r.rule}`);
     return text(`${results.length - failed.length}/${results.length} checks ok
@@ -40881,7 +40970,7 @@ server.registerPrompt(
   },
   ({ task, stacks, phase }) => {
     const docs = forStacks(catalog(), stacks.split(",").map((s) => s.trim()).filter(Boolean), phase ?? "implement");
-    const body = join6(docs);
+    const body = join7(docs);
     return {
       messages: [
         {
@@ -40912,7 +41001,7 @@ server.registerPrompt(
             type: "text",
             text: `Revise as mudan\xE7as atuais contra os padr\xF5es abaixo. Liste viola\xE7\xF5es com id da regra, arquivo:linha e corre\xE7\xE3o sugerida.
 
-${join6(docs)}`
+${join7(docs)}`
           }
         }
       ]

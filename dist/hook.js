@@ -3541,8 +3541,149 @@ import { isAbsolute, join as join5, resolve as resolve4 } from "node:path";
 // src/hooks/config.ts
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+
+// src/references.ts
+var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
+var HASH_EXT = /* @__PURE__ */ new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
+var MAX_FILE_BYTES = 512 * 1024;
+function commentText(line, ext) {
+  const t = line.trim();
+  if (SLASH_EXT.has(ext)) {
+    if (/^(\/\*|\*)/.test(t)) return t;
+    const m = /(?<!:)\/\/(.*)$/.exec(line);
+    return m ? m[1] : null;
+  }
+  if (HASH_EXT.has(ext)) {
+    if (t.startsWith("#!")) return null;
+    const m = /(?:^|\s)#(.*)$/.exec(line);
+    return m ? m[1] : null;
+  }
+  return null;
+}
+function testTitle(line) {
+  const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
+  return m ? m[2] : null;
+}
+var NOT_TICKET = [
+  // normas, formatos e protocolos
+  "ADR",
+  "SPEC",
+  "REQ",
+  "RN",
+  "RF",
+  "UTF",
+  "ISO",
+  "SHA",
+  "RFC",
+  "CVE",
+  "CWE",
+  "HTTP",
+  "TLS",
+  "MD",
+  "ES",
+  "IEEE",
+  "WCAG",
+  "ECMA",
+  "UTC",
+  "GMT",
+  "TCP",
+  "IPV",
+  "PT",
+  "EN",
+  // algoritmos com tamanho de chave
+  "AES",
+  "RSA",
+  "DES",
+  "ECDSA",
+  // máscaras de data e hora seguidas de valor fixo
+  "YYYY",
+  "YY",
+  "MM",
+  "DD",
+  "HH"
+];
+var TICKET_PREFIX = /^[A-Z]{2,10}$/;
+var ticketKeyCache = /* @__PURE__ */ new Map();
+function ticketKey(ignore = []) {
+  const key = ignore.join("|");
+  let re = ticketKeyCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+var SEGUNDO = String.raw`(?<!\b(?:o|um|do|no|ao|pelo|este|esse|seu|nosso)\s)segundo`;
+var RE = {
+  issueNumber: /(?:^|[^\w&])#\d{1,6}\b/,
+  issueWord: /\b(?:issue|ticket|PR|pull request|merge request|MR|chamado|card)\s*(?:n[ºo°.]?\s*)?#?\d+/i,
+  tracker: /(github\.com\/\S+\/(?:issues|pull)\/\d+|atlassian\.net|\bjira\.|linear\.app|gitlab\.\S+\/-\/(?:issues|merge_requests)|_workitems|trello\.com|notion\.so|slack\.com)/i,
+  discussion: new RegExp(String.raw`\b(?:conforme|${SEGUNDO}|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|slack|teams|whatsapp)\b`, "i"),
+  // Os dois canais abaixo são palavras comuns no código (o endereço de um usuário, o local de uma chamada): só
+  // contam colados ao particípio que marca a citação.
+  discussionChannel: /\b(?:combinad[oa]|alinhad[oa]|discutid[oa]|acordad[oa])\s+(?:(?:por|em|via|n[oa]|pel[oa])\s+)?(?:e-?mail|call)\b/i,
+  todo: /\b(TODO|FIXME|HACK|XXX)\b(.*)/,
+  adr: /\bADR[- ]?(\d+)/i,
+  spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
+  url: /https?:\/\/\S+/
+};
+function scanText(text, kind, opts) {
+  const out = [];
+  const add = (rule, severity, message) => out.push({ rule, severity, message });
+  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || ticketKey(opts.ticketKeyIgnore).test(text) || RE.tracker.test(text);
+  if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
+  if (RE.discussion.test(text) || RE.discussionChannel.test(text)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
+  if (kind === "comment") {
+    const todo = RE.todo.exec(text);
+    if (todo) {
+      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(todo[2]);
+      if (withRef) add("DOC-004", "error", `${todo[1]} com refer\xEAncia \u2014 pend\xEAncia vai para o relat\xF3rio/issue`);
+      else add("SCOPE-001", "warn", `${todo[1]} no c\xF3digo \u2014 registre como sugest\xE3o no relat\xF3rio; limita\xE7\xE3o conhecida vira coment\xE1rio descritivo`);
+    }
+    if (RE.adr.test(text)) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
+    if (RE.spec.test(text)) add("DOC-003", "warn", "refer\xEAncia normativa/spec \u2014 confirme que se enquadra em DOC-003");
+    if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em coment\xE1rio \u2014 prefira ID est\xE1vel da fonte can\xF4nica");
+  }
+  return out;
+}
+function scanLines(file, lines, ext, opts = {}) {
+  const found = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const { n, text } of lines) {
+    const targets = [];
+    const c = commentText(text, ext);
+    if (c !== null) targets.push({ s: c, kind: "comment" });
+    const t = testTitle(text);
+    if (t !== null) targets.push({ s: t, kind: "test" });
+    for (const { s, kind } of targets) {
+      for (const f of scanText(s, kind, opts)) {
+        const key = `${n}:${f.rule}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        found.push({ file, line: n, snippet: text.trim().slice(0, 140), ...f });
+      }
+    }
+  }
+  return found;
+}
+function parseDiff(diff) {
+  let file = "";
+  let n = 0;
+  const byFile = /* @__PURE__ */ new Map();
+  for (const raw of diff.split(/\r?\n/)) {
+    if (raw.startsWith("+++ ")) file = raw.slice(4).replace(/^b\//, "");
+    else if (raw.startsWith("@@")) n = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0) - 1;
+    else if (raw.startsWith("+")) {
+      n++;
+      byFile.set(file, [...byFile.get(file) ?? [], { n, text: raw.slice(1) }]);
+    } else if (!raw.startsWith("-")) n++;
+  }
+  return byFile;
+}
+
+// src/hooks/config.ts
 var MIN_REASON = 10;
-var empty = (root) => ({ stacks: [], disable: [], invalidDisable: [], root });
+var empty = (root) => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
 function loadProjectConfig(start) {
   let dir = resolve(start);
   for (let i = 0; i < 8; i++) {
@@ -3557,6 +3698,10 @@ function loadProjectConfig(start) {
           const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
           if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
           else cfg.invalidDisable.push(rule);
+        }
+        for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
+          if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
+          else cfg.invalidTicketKeyIgnore.push(String(p));
         }
         return cfg;
       } catch {
@@ -3590,96 +3735,6 @@ var standardsDir = resolve2(
 import { execFileSync } from "node:child_process";
 import { existsSync as existsSync2, readFileSync as readFileSync2, statSync } from "node:fs";
 import { join as join3 } from "node:path";
-
-// src/references.ts
-var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
-var HASH_EXT = /* @__PURE__ */ new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
-var MAX_FILE_BYTES = 512 * 1024;
-function commentText(line, ext) {
-  const t = line.trim();
-  if (SLASH_EXT.has(ext)) {
-    if (/^(\/\*|\*)/.test(t)) return t;
-    const m = /(?<!:)\/\/(.*)$/.exec(line);
-    return m ? m[1] : null;
-  }
-  if (HASH_EXT.has(ext)) {
-    if (t.startsWith("#!")) return null;
-    const m = /(?:^|\s)#(.*)$/.exec(line);
-    return m ? m[1] : null;
-  }
-  return null;
-}
-function testTitle(line) {
-  const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
-  return m ? m[2] : null;
-}
-var NOT_TICKET = "ADR|SPEC|REQ|RN|RF|UTF|ISO|SHA|RFC|CVE|CWE|HTTP|TLS|MD|ES|IEEE|WCAG|ECMA|UTC|GMT|TCP|IPV|X|H|PT|EN";
-var RE = {
-  issueNumber: /(?:^|[^\w&])#\d{1,6}\b/,
-  issueWord: /\b(?:issue|ticket|PR|pull request|merge request|MR|chamado|card)\s*(?:n[ºo°.]?\s*)?#?\d+/i,
-  ticketKey: new RegExp(`\\b(?!(?:${NOT_TICKET})-)[A-Z][A-Z0-9]{1,9}-\\d+\\b`),
-  tracker: /(github\.com\/\S+\/(?:issues|pull)\/\d+|atlassian\.net|\bjira\.|linear\.app|gitlab\.\S+\/-\/(?:issues|merge_requests)|_workitems|trello\.com|notion\.so|slack\.com)/i,
-  discussion: /\b(?:conforme|segundo|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|call|slack|teams|whatsapp|e-?mail)\b/i,
-  todo: /\b(TODO|FIXME|HACK|XXX)\b(.*)/,
-  adr: /\bADR[- ]?(\d+)/i,
-  spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
-  url: /https?:\/\/\S+/
-};
-function scanText(text, kind) {
-  const out = [];
-  const add = (rule, severity, message) => out.push({ rule, severity, message });
-  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || RE.ticketKey.test(text) || RE.tracker.test(text);
-  if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
-  if (RE.discussion.test(text)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
-  if (kind === "comment") {
-    const todo = RE.todo.exec(text);
-    if (todo) {
-      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(todo[2]);
-      if (withRef) add("DOC-004", "error", `${todo[1]} com refer\xEAncia \u2014 pend\xEAncia vai para o relat\xF3rio/issue`);
-      else add("SCOPE-001", "warn", `${todo[1]} no c\xF3digo \u2014 registre como sugest\xE3o no relat\xF3rio; limita\xE7\xE3o conhecida vira coment\xE1rio descritivo`);
-    }
-    if (RE.adr.test(text)) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
-    if (RE.spec.test(text)) add("DOC-003", "warn", "refer\xEAncia normativa/spec \u2014 confirme que se enquadra em DOC-003");
-    if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em coment\xE1rio \u2014 prefira ID est\xE1vel da fonte can\xF4nica");
-  }
-  return out;
-}
-function scanLines(file, lines, ext) {
-  const found = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const { n, text } of lines) {
-    const targets = [];
-    const c = commentText(text, ext);
-    if (c !== null) targets.push({ s: c, kind: "comment" });
-    const t = testTitle(text);
-    if (t !== null) targets.push({ s: t, kind: "test" });
-    for (const { s, kind } of targets) {
-      for (const f of scanText(s, kind)) {
-        const key = `${n}:${f.rule}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        found.push({ file, line: n, snippet: text.trim().slice(0, 140), ...f });
-      }
-    }
-  }
-  return found;
-}
-function parseDiff(diff) {
-  let file = "";
-  let n = 0;
-  const byFile = /* @__PURE__ */ new Map();
-  for (const raw of diff.split(/\r?\n/)) {
-    if (raw.startsWith("+++ ")) file = raw.slice(4).replace(/^b\//, "");
-    else if (raw.startsWith("@@")) n = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0) - 1;
-    else if (raw.startsWith("+")) {
-      n++;
-      byFile.set(file, [...byFile.get(file) ?? [], { n, text: raw.slice(1) }]);
-    } else if (!raw.startsWith("-")) n++;
-  }
-  return byFile;
-}
-
-// src/gitdiff.ts
 var git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
 var SAFE_REF = /^[\w][\w./~^@{}-]*$/;
 var MAX_FILE = 256 * 1024;
@@ -4007,9 +4062,9 @@ var TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|tes
 var LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
 var DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 function evaluateWrite(input) {
-  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root);
+  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan);
 }
-function evaluateAddedLines(path, added, root) {
+function evaluateAddedLines(path, added, root, scan = {}) {
   const out = [];
   const file = basename2(path);
   const ext = extname2(path);
@@ -4059,7 +4114,7 @@ function evaluateAddedLines(path, added, root) {
         break;
       }
   }
-  for (const f of scanLines(path, added, ext)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of scanLines(path, added, ext, scan)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
   const lang = createLanguageScanner(root ?? path);
   for (const f of lang.scan(path, added)) out.push(v(f.rule, "warn", `${file}:${f.line} ${f.message}`));
   return out;
@@ -4075,7 +4130,7 @@ function applyConfig(vs, cfg) {
   const off = new Set(cfg.disable.map((d) => d.rule));
   return vs.filter((x) => !off.has(x.rule));
 }
-function evaluateTool(input, cwd, root) {
+function evaluateTool(input, cwd, root, scan) {
   const ti = input.tool_input ?? {};
   const abs = (p) => isAbsolute(p) ? p : resolve4(cwd, p);
   switch (input.tool_name) {
@@ -4090,20 +4145,20 @@ function evaluateTool(input, cwd, root) {
     }
     case "Write": {
       const path = abs(String(ti.file_path ?? ""));
-      return evaluateWrite({ path, before: readText(path), after: String(ti.content ?? ""), root });
+      return evaluateWrite({ path, before: readText(path), after: String(ti.content ?? ""), root, scan });
     }
     case "Edit":
     case "MultiEdit": {
       const path = abs(String(ti.file_path ?? ""));
       const edits = Array.isArray(ti.edits) ? ti.edits : [{ old_string: ti.old_string, new_string: ti.new_string }];
-      return edits.flatMap((e) => evaluateWrite({ path, before: String(e.old_string ?? ""), after: String(e.new_string ?? ""), root }));
+      return edits.flatMap((e) => evaluateWrite({ path, before: String(e.old_string ?? ""), after: String(e.new_string ?? ""), root, scan }));
     }
     default:
       return [];
   }
 }
 function preToolUse(input, cfg, cwd) {
-  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd), cfg);
+  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, { ticketKeyIgnore: cfg.ticketKeyIgnore }), cfg);
   const deny = vs.filter((x) => x.level === "deny");
   const ask = vs.filter((x) => x.level === "ask");
   const warn = vs.filter((x) => x.level === "warn");
@@ -4147,7 +4202,7 @@ function stopGate(input, cfg, cwd) {
   if (!changes) return;
   const root = cfg.root ?? cwd;
   const found = [];
-  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join5(changes.gitRoot, file), lines, root));
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join5(changes.gitRoot, file), lines, root, { ticketKeyIgnore: cfg.ticketKeyIgnore }));
   for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" \xE9 dado sens\xEDvel e est\xE1 version\xE1vel (SEC-003). Remova do \xEDndice / adicione ao .gitignore.` });
   const blocking = applyConfig(found, cfg).filter((x) => x.level === "deny");
@@ -4174,7 +4229,9 @@ function sessionStart(cfg, input, cwd) {
   const stacks = cfg.stacks.length ? `Stacks do projeto (.ds-mcp.json): ${cfg.stacks.join(", ")}.` : 'Stacks do projeto n\xE3o configuradas: crie `.ds-mcp.json` com {"stacks":["react","nestjs"]} ou informe-as ao chamar get_guardrails.';
   const exceptions = [
     ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
-    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigat\xF3rio, m\xEDn. 10 caracteres); a regra continua ativa`)
+    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigat\xF3rio, m\xEDn. 10 caracteres); a regra continua ativa`),
+    ...cfg.ticketKeyIgnore.length ? [`  - prefixos que n\xE3o s\xE3o ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : [],
+    ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo \xE9 de 2 a 10 letras mai\xFAsculas)`)
   ];
   process.stdout.write(
     [

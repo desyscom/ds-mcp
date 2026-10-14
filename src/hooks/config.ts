@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { TICKET_PREFIX } from "../references.js";
 
 /** Exceção permanente a uma regra. O motivo é obrigatório (PREC-003). */
 export interface Disabled {
@@ -15,12 +16,16 @@ export interface ProjectConfig {
   disable: Disabled[];
   /** entradas de `disable` rejeitadas (sem motivo, ou formato antigo em string): a regra continua ativa */
   invalidDisable: string[];
+  /** prefixos da forma "letras, hífen, número" que não contam como chave de ticket (códigos do domínio) */
+  ticketKeyIgnore: string[];
+  /** entradas de `ticketKeyIgnore` fora do formato (2 a 10 letras maiúsculas): ignoradas */
+  invalidTicketKeyIgnore: string[];
   /** diretório onde o arquivo foi achado (raiz do projeto), ou null */
   root: string | null;
 }
 
 const MIN_REASON = 10;
-const empty = (root: string | null): ProjectConfig => ({ stacks: [], disable: [], invalidDisable: [], root });
+const empty = (root: string | null): ProjectConfig => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
 
 export function loadProjectConfig(start: string): ProjectConfig {
   let dir = resolve(start);
@@ -36,6 +41,10 @@ export function loadProjectConfig(start: string): ProjectConfig {
           const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
           if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
           else cfg.invalidDisable.push(rule);
+        }
+        for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
+          if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
+          else cfg.invalidTicketKeyIgnore.push(String(p));
         }
         return cfg;
       } catch {

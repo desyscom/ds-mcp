@@ -6,11 +6,12 @@ import { z } from "zod";
 import { forStacks, loadCatalog, standardsDir, type Doc } from "./catalog.js";
 import { checkProject } from "./checks.js";
 import { collectChanges, commitsSince } from "./gitdiff.js";
+import { loadProjectConfig } from "./hooks/config.js";
 import { evaluateCommitMessage } from "./hooks/policy.js";
 import { checkLanguage } from "./language.js";
 import { checkReferences, checkReferencesFiles, formatFindings } from "./references.js";
 
-const server = new McpServer({ name: "ds-mcp", version: "0.1.0" });
+const server = new McpServer({ name: "ds-mcp", version: "0.2.0" });
 
 // Recarrega a cada chamada: editar um .md reflete sem reiniciar o servidor.
 const catalog = () => loadCatalog();
@@ -79,12 +80,15 @@ server.registerTool(
   async (args) => {
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, limit } = args;
+    // `diff` não diz de que projeto veio: só path e repo acham o `.ds-mcp.json`.
+    const from = repo ?? path;
+    const scan = from ? { ticketKeyIgnore: loadProjectConfig(resolve(from)).ticketKeyIgnore } : {};
     if (repo) {
       const changes = collectChanges(resolve(repo), base);
       if (!changes) return { ...text(`"${repo}" não é um repositório git.`), isError: true };
-      return text(formatFindings(checkReferencesFiles(changes.added), { limit }));
+      return text(formatFindings(checkReferencesFiles(changes.added, scan), { limit }));
     }
-    return text(formatFindings(checkReferences({ path: path ? resolve(path) : undefined, diff }), { limit }));
+    return text(formatFindings(checkReferences({ path: path ? resolve(path) : undefined, diff }, scan), { limit }));
   },
 );
 

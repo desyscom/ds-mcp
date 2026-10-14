@@ -39,26 +39,61 @@ export function testTitle(line: string): string | null {
   return m ? m[2] : null;
 }
 
-const NOT_TICKET = "ADR|SPEC|REQ|RN|RF|UTF|ISO|SHA|RFC|CVE|CWE|HTTP|TLS|MD|ES|IEEE|WCAG|ECMA|UTC|GMT|TCP|IPV|X|H|PT|EN";
+/** Prefixos da forma "letras, hífen, número" que não são chave de ticket. O projeto soma os seus em `ticketKeyIgnore`. */
+const NOT_TICKET = [
+  // normas, formatos e protocolos
+  "ADR", "SPEC", "REQ", "RN", "RF", "UTF", "ISO", "SHA", "RFC", "CVE", "CWE", "HTTP", "TLS", "MD", "ES", "IEEE", "WCAG", "ECMA", "UTC", "GMT", "TCP", "IPV", "PT", "EN",
+  // algoritmos com tamanho de chave
+  "AES", "RSA", "DES", "ECDSA",
+  // máscaras de data e hora seguidas de valor fixo
+  "YYYY", "YY", "MM", "DD", "HH",
+];
+/** Prefixo aceito em `ticketKeyIgnore`: o mesmo formato que a chave de ticket exige. */
+export const TICKET_PREFIX = /^[A-Z]{2,10}$/;
+
+export interface ScanOptions {
+  /** prefixos extras que não são ticket, validados por TICKET_PREFIX */
+  ticketKeyIgnore?: readonly string[];
+}
+
+const ticketKeyCache = new Map<string, RegExp>();
+/**
+ * Chave de ticket tem prefixo só de letras. Prefixo com dígito é código de outra coisa: regra de validação do
+ * Manual da NF-e (letra e dígitos antes do hífen) ou fragmento de classe de caractere de regex.
+ */
+function ticketKey(ignore: readonly string[] = []): RegExp {
+  const key = ignore.join("|");
+  let re = ticketKeyCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+
+// "segundo" só cita como preposição; depois de artigo ou determinante é ordinal ("o segundo fator").
+const SEGUNDO = String.raw`(?<!\b(?:o|um|do|no|ao|pelo|este|esse|seu|nosso)\s)segundo`;
 const RE = {
   issueNumber: /(?:^|[^\w&])#\d{1,6}\b/,
   issueWord: /\b(?:issue|ticket|PR|pull request|merge request|MR|chamado|card)\s*(?:n[ºo°.]?\s*)?#?\d+/i,
-  ticketKey: new RegExp(`\\b(?!(?:${NOT_TICKET})-)[A-Z][A-Z0-9]{1,9}-\\d+\\b`),
   tracker: /(github\.com\/\S+\/(?:issues|pull)\/\d+|atlassian\.net|\bjira\.|linear\.app|gitlab\.\S+\/-\/(?:issues|merge_requests)|_workitems|trello\.com|notion\.so|slack\.com)/i,
-  discussion: /\b(?:conforme|segundo|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|call|slack|teams|whatsapp|e-?mail)\b/i,
+  discussion: new RegExp(String.raw`\b(?:conforme|${SEGUNDO}|ver|veja|cf\.|ref\.?|combinado|alinhado|definido)\b[^.]{0,40}\b(?:discuss[ãa]o|conversa|thread|reuni[ãa]o|slack|teams|whatsapp)\b`, "i"),
+  // Os dois canais abaixo são palavras comuns no código (o endereço de um usuário, o local de uma chamada): só
+  // contam colados ao particípio que marca a citação.
+  discussionChannel: /\b(?:combinad[oa]|alinhad[oa]|discutid[oa]|acordad[oa])\s+(?:(?:por|em|via|n[oa]|pel[oa])\s+)?(?:e-?mail|call)\b/i,
   todo: /\b(TODO|FIXME|HACK|XXX)\b(.*)/,
   adr: /\bADR[- ]?(\d+)/i,
   spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
   url: /https?:\/\/\S+/,
 };
 
-function scanText(text: string, kind: "comment" | "test"): Omit<Finding, "file" | "line" | "snippet">[] {
+function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Omit<Finding, "file" | "line" | "snippet">[] {
   const out: Omit<Finding, "file" | "line" | "snippet">[] = [];
   const add = (rule: string, severity: Severity, message: string) => out.push({ rule, severity, message });
 
-  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || RE.ticketKey.test(text) || RE.tracker.test(text);
+  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || ticketKey(opts.ticketKeyIgnore).test(text) || RE.tracker.test(text);
   if (tracker) add("DOC-004", "error", "referência a issue/PR/ticket — descreva o comportamento, não a origem");
-  if (RE.discussion.test(text)) add("DOC-004", "error", "referência a conversa/discussão — consolide a decisão num ADR ou explique localmente");
+  if (RE.discussion.test(text) || RE.discussionChannel.test(text)) add("DOC-004", "error", "referência a conversa/discussão — consolide a decisão num ADR ou explique localmente");
 
   if (kind === "comment") {
     const todo = RE.todo.exec(text);
@@ -74,7 +109,7 @@ function scanText(text: string, kind: "comment" | "test"): Omit<Finding, "file" 
   return out;
 }
 
-export function scanLines(file: string, lines: { n: number; text: string }[], ext: string): Finding[] {
+export function scanLines(file: string, lines: { n: number; text: string }[], ext: string, opts: ScanOptions = {}): Finding[] {
   const found: Finding[] = [];
   const seen = new Set<string>();
   for (const { n, text } of lines) {
@@ -84,7 +119,7 @@ export function scanLines(file: string, lines: { n: number; text: string }[], ex
     const t = testTitle(text);
     if (t !== null) targets.push({ s: t, kind: "test" });
     for (const { s, kind } of targets) {
-      for (const f of scanText(s, kind)) {
+      for (const f of scanText(s, kind, opts)) {
         const key = `${n}:${f.rule}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -134,11 +169,11 @@ export function parseDiff(diff: string): Map<string, { n: number; text: string }
   return byFile;
 }
 
-export function checkReferences(input: { path?: string; diff?: string }): Finding[] {
+export function checkReferences(input: { path?: string; diff?: string }, opts: ScanOptions = {}): Finding[] {
   const findings: Finding[] = [];
   if (input.diff) {
     const byFile = parseDiff(input.diff);
-    for (const [f, lines] of byFile) findings.push(...scanLines(f, lines, extname(f)));
+    for (const [f, lines] of byFile) findings.push(...scanLines(f, lines, extname(f), opts));
   } else if (input.path) {
     const root = input.path;
     const isFile = statSync(root).isFile();
@@ -147,16 +182,16 @@ export function checkReferences(input: { path?: string; diff?: string }): Findin
       if (!SLASH_EXT.has(ext) && !HASH_EXT.has(ext)) continue;
       if (statSync(file).size > MAX_FILE_BYTES) continue;
       const lines = readFileSync(file, "utf8").split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
-      findings.push(...scanLines(isFile ? file : relative(root, file), lines, ext));
+      findings.push(...scanLines(isFile ? file : relative(root, file), lines, ext, opts));
     }
   }
   return [...findings, ...propagation(findings)];
 }
 
 /** Referências indevidas em linhas já coletadas (ex.: mudanças do git). */
-export function checkReferencesFiles(files: Map<string, { n: number; text: string }[]>): Finding[] {
+export function checkReferencesFiles(files: Map<string, { n: number; text: string }[]>, opts: ScanOptions = {}): Finding[] {
   const findings: Finding[] = [];
-  for (const [file, lines] of files) findings.push(...scanLines(file, lines, extname(file)));
+  for (const [file, lines] of files) findings.push(...scanLines(file, lines, extname(file), opts));
   return [...findings, ...propagation(findings)];
 }
 

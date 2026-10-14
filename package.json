@@ -1,6 +1,6 @@
 {
   "name": "ds-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server que expõe padrões, guardrails e prompts de desenvolvimento",
   "type": "module",
   "bin": {
@@ -21,7 +21,8 @@
     "smoke": "node scripts/smoke.mjs",
     "test:policy": "node scripts/test-policy.mjs",
     "test:hooks": "node scripts/test-hooks.mjs",
-    "test": "npm run build && npm run test:policy && npm run test:hooks && npm run smoke"
+    "test:references": "node scripts/test-references.mjs",
+    "test": "npm run build && npm run test:policy && npm run test:references && npm run test:hooks && npm run smoke"
   },
   "engines": {
     "node": ">=20"

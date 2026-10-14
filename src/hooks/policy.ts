@@ -1,6 +1,6 @@
 import { basename, extname } from "node:path";
 import { createLanguageScanner } from "../language.js";
-import { scanLines } from "../references.js";
+import { scanLines, type ScanOptions } from "../references.js";
 import { parseCommits } from "./commit.js";
 
 /**
@@ -159,6 +159,8 @@ export interface WriteInput {
   after: string;
   /** raiz do projeto, para achar docs/glossary.md */
   root?: string;
+  /** `ticketKeyIgnore` do `.ds-mcp.json` */
+  scan?: ScanOptions;
 }
 
 /** Linhas de `after` que não existiam em `before` (comparação por linha com trim). */
@@ -188,11 +190,11 @@ const LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*no
 const DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 
 export function evaluateWrite(input: WriteInput): Violation[] {
-  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root);
+  return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan);
 }
 
 /** Avalia só as linhas adicionadas a um arquivo (usado por Write/Edit e pelo gate do Stop, que lê o diff). */
-export function evaluateAddedLines(path: string, added: { n: number; text: string }[], root?: string): Violation[] {
+export function evaluateAddedLines(path: string, added: { n: number; text: string }[], root?: string, scan: ScanOptions = {}): Violation[] {
   const out: Violation[] = [];
   const file = basename(path);
   const ext = extname(path);
@@ -253,7 +255,7 @@ export function evaluateAddedLines(path: string, added: { n: number; text: strin
       }
 
   // DOC-*, SCOPE-001: referências indevidas em comentários (erros bloqueiam; alertas só informam)
-  for (const f of scanLines(path, added, ext)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
+  for (const f of scanLines(path, added, ext, scan)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
 
   // LANG-*: heurístico, nunca bloqueia
   const lang = createLanguageScanner(root ?? path);

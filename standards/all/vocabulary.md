@@ -26,8 +26,8 @@ O `docs/glossary.md` de cada projeto usa as mesmas colunas e **prevalece** sobre
 | branch | branch | ramificação | no sentido de filial de empresa, traduz (LANG-004) |
 | commit | commit | confirmação de código | |
 | hook | hook | gancho | |
-| fixture | fixture | acessório | |
-| tree | tree | ramo | |
+| fixture | fixture | | "acessório" tem sentido de negócio (evento acessório da NF-e, acessório de produto) |
+| tree | tree | | "árvore" é a tradução corrente e aceita (árvore de sintaxe, árvore do DOM); "ramo" não traduz tree: é o desvio de uma condição ou o `choice` de um schema |
 | build | build | | "compilação" é outra coisa (compile ≠ build) |
 | deploy | deploy | | "implantação" tem sentido de negócio (implantação do cliente) |
 | rollback | rollback | | |
