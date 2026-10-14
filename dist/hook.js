@@ -3670,6 +3670,7 @@ var RE = {
   spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
   url: /https?:\/\/\S+/
 };
+var withoutFormatExamples = (text) => text.replace(/`([^`]*)`/g, (span, inner) => /^ADR[- ]?\d+$/i.test(inner.trim()) ? span : "");
 function scanText(text, kind, opts) {
   const out = [];
   const add = (rule, severity, message) => out.push({ rule, severity, message });
@@ -3683,7 +3684,7 @@ function scanText(text, kind, opts) {
       if (withRef) add("DOC-004", "error", `${todo[1]} com refer\xEAncia \u2014 pend\xEAncia vai para o relat\xF3rio/issue`);
       else add("SCOPE-001", "warn", `${todo[1]} no c\xF3digo \u2014 registre como sugest\xE3o no relat\xF3rio; limita\xE7\xE3o conhecida vira coment\xE1rio descritivo`);
     }
-    if (RE.adr.test(text)) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
+    if (RE.adr.test(withoutFormatExamples(text))) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
     if (RE.spec.test(text)) add("DOC-003", "warn", "refer\xEAncia normativa/spec \u2014 confirme que se enquadra em DOC-003");
     if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em coment\xE1rio \u2014 prefira ID est\xE1vel da fonte can\xF4nica");
     if (opts.decisionIdPrefixes?.length && decisionId(opts.decisionIdPrefixes).test(text) && !/\bADR\b/i.test(text))
