@@ -99,6 +99,23 @@ const RE = {
 };
 
 /**
+ * Lista de números com `#` ligada por `/`, `·` ou "e": o qualificador do primeiro vale para todos. `digits` limita o
+ * tamanho de cada número.
+ */
+const numberList = (digits: string) => {
+  const one = String.raw`#\d${digits}[a-z]?\b`;
+  return String.raw`${one}(?:\s*[/·]\s*${one}|\s+e\s+${one})*`;
+};
+/**
+ * Número com `#` que não é issue: a decisão numerada colada ao ID do ADR, a regra de negócio numerada de um anexo
+ * (depois de `RN` ou antes de "do anexo") e o número da norma PKCS. Separado do ADR por vírgula, ponto e vírgula ou
+ * outra palavra, o número volta a ser issue: é assim que o código cita o ADR junto da issue que o motivou. O número
+ * de decisão tem até dois dígitos pelo mesmo motivo: com três ou mais, colado ao ADR, é a issue.
+ */
+const NOT_ISSUE = new RegExp(String.raw`\bADR[- ]?\d+\s+${numberList("{1,2}")}|\bRN\s+${numberList("+")}|${numberList("+")}(?=\s+do\s+anexo)|\bPKCS\s?#\d+`, "gi");
+const withoutNumberedRules = (text: string) => text.replace(NOT_ISSUE, "");
+
+/**
  * Trecho de código inline com mais que o ID mostra o formato de uma referência, não a cita. O ID sozinho entre crases
  * continua sendo citação: o projeto que escreve as citações assim não perde o alerta nem a contagem de propagação.
  */
@@ -108,14 +125,14 @@ function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Om
   const out: Omit<Finding, "file" | "line" | "snippet">[] = [];
   const add = (rule: string, severity: Severity, message: string) => out.push({ rule, severity, message });
 
-  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || hasTicketKey(text, opts) || RE.tracker.test(text);
+  const tracker = RE.issueNumber.test(withoutNumberedRules(text)) || RE.issueWord.test(text) || hasTicketKey(text, opts) || RE.tracker.test(text);
   if (tracker) add("DOC-004", "error", "referência a issue/PR/ticket — descreva o comportamento, não a origem");
   if (RE.discussion.test(text) || RE.discussionChannel.test(text)) add("DOC-004", "error", "referência a conversa/discussão — consolide a decisão num ADR ou explique localmente");
 
   if (kind === "comment") {
     const todo = RE.todo.exec(text);
     if (todo) {
-      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(todo[2]);
+      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(withoutNumberedRules(todo[2]));
       if (withRef) add("DOC-004", "error", `${todo[1]} com referência — pendência vai para o relatório/issue`);
       else add("SCOPE-001", "warn", `${todo[1]} no código — registre como sugestão no relatório; limitação conhecida vira comentário descritivo`);
     }

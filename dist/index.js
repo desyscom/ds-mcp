@@ -40710,17 +40710,23 @@ var RE = {
   spec: /\b(?:SPEC|REQ|RN|RF)-\d+\b|\bRFC\s?\d+|\bconforme\s+(?:a\s+)?(?:spec|especifica[çc][ãa]o|requisito)/i,
   url: /https?:\/\/\S+/
 };
+var numberList = (digits) => {
+  const one = String.raw`#\d${digits}[a-z]?\b`;
+  return String.raw`${one}(?:\s*[/·]\s*${one}|\s+e\s+${one})*`;
+};
+var NOT_ISSUE = new RegExp(String.raw`\bADR[- ]?\d+\s+${numberList("{1,2}")}|\bRN\s+${numberList("+")}|${numberList("+")}(?=\s+do\s+anexo)|\bPKCS\s?#\d+`, "gi");
+var withoutNumberedRules = (text2) => text2.replace(NOT_ISSUE, "");
 var withoutFormatExamples = (text2) => text2.replace(/`([^`]*)`/g, (span, inner) => /^ADR[- ]?\d+$/i.test(inner.trim()) ? span : "");
 function scanText(text2, kind, opts) {
   const out = [];
   const add = (rule, severity, message) => out.push({ rule, severity, message });
-  const tracker = RE.issueNumber.test(text2) || RE.issueWord.test(text2) || hasTicketKey(text2, opts) || RE.tracker.test(text2);
+  const tracker = RE.issueNumber.test(withoutNumberedRules(text2)) || RE.issueWord.test(text2) || hasTicketKey(text2, opts) || RE.tracker.test(text2);
   if (tracker) add("DOC-004", "error", "refer\xEAncia a issue/PR/ticket \u2014 descreva o comportamento, n\xE3o a origem");
   if (RE.discussion.test(text2) || RE.discussionChannel.test(text2)) add("DOC-004", "error", "refer\xEAncia a conversa/discuss\xE3o \u2014 consolide a decis\xE3o num ADR ou explique localmente");
   if (kind === "comment") {
     const todo = RE.todo.exec(text2);
     if (todo) {
-      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(todo[2]);
+      const withRef = /\(.+\)|:\s*\S+-\d+|#\d+/.test(withoutNumberedRules(todo[2]));
       if (withRef) add("DOC-004", "error", `${todo[1]} com refer\xEAncia \u2014 pend\xEAncia vai para o relat\xF3rio/issue`);
       else add("SCOPE-001", "warn", `${todo[1]} no c\xF3digo \u2014 registre como sugest\xE3o no relat\xF3rio; limita\xE7\xE3o conhecida vira coment\xE1rio descritivo`);
     }
