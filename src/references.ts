@@ -59,6 +59,8 @@ export interface ScanOptions {
   ticketKeyIgnore?: readonly string[];
   /** prefixos de ID de decisão, validados por DECISION_PREFIX; sem eles, o alerta de ID solto fica desligado */
   decisionIdPrefixes?: readonly string[];
+  /** IDs de regra dos padrões (`loadRuleIds`): têm o formato de chave de ticket, mas nomeiam um guardrail */
+  ruleIds?: ReadonlySet<string>;
 }
 
 const ticketKeyCache = new Map<string, RegExp>();
@@ -70,10 +72,16 @@ function ticketKey(ignore: readonly string[] = []): RegExp {
   const key = ignore.join("|");
   let re = ticketKeyCache.get(key);
   if (!re) {
-    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
+    re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`, "g");
     ticketKeyCache.set(key, re);
   }
   return re;
+}
+
+/** Um ID de regra não esconde o ticket que divide a linha com ele: cada chave é avaliada sozinha. */
+function hasTicketKey(text: string, opts: ScanOptions): boolean {
+  for (const m of text.matchAll(ticketKey(opts.ticketKeyIgnore))) if (!opts.ruleIds?.has(m[0])) return true;
+  return false;
 }
 
 const decisionIdCache = new Map<string, RegExp>();
@@ -111,7 +119,7 @@ function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Om
   const out: Omit<Finding, "file" | "line" | "snippet">[] = [];
   const add = (rule: string, severity: Severity, message: string) => out.push({ rule, severity, message });
 
-  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || ticketKey(opts.ticketKeyIgnore).test(text) || RE.tracker.test(text);
+  const tracker = RE.issueNumber.test(text) || RE.issueWord.test(text) || hasTicketKey(text, opts) || RE.tracker.test(text);
   if (tracker) add("DOC-004", "error", "referência a issue/PR/ticket — descreva o comportamento, não a origem");
   if (RE.discussion.test(text) || RE.discussionChannel.test(text)) add("DOC-004", "error", "referência a conversa/discussão — consolide a decisão num ADR ou explique localmente");
 

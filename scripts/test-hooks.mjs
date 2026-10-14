@@ -55,6 +55,10 @@ assert.match(o.additionalContext, /LANG-002/);
 assert.equal(pre("Bash", { command: "npm run test" }), "");
 assert.equal(pre("Read", { file_path: join(proj, ".env.example") }), "");
 assert.equal(pre("Write", { file_path: "src/a.ts", content: "// Usa o preço capturado na venda.\nconst a = 1;" }), "");
+// O comentário avaliado é montado em runtime: escrito por extenso, o hook leria a linha deste teste como comentário.
+const withComment = (s) => ["//", s, "\nconst a = 1;"].join(" ");
+assert.equal(pre("Write", { file_path: "src/a.ts", content: withComment("Bloqueia segredo no código (SEC-002).") }), ""); // ID de regra não é ticket
+assert.equal(specific(pre("Write", { file_path: "src/a.ts", content: withComment("Ver DOC-099 antes de mudar.") })).permissionDecision, "deny");
 assert.equal(pre("Glob", { pattern: "**/*.ts" }), "");
 
 // ---- Edit só avalia linhas novas: legado preservado (DOC-012) ----

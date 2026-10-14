@@ -51,6 +51,24 @@ export function loadCatalog(): Doc[] {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+const DECLARED_ID = /^- `([A-Z]{2,10}-\d{3})`/;
+const ID = /\b[A-Z]{2,10}-\d{3}\b/g;
+
+/**
+ * IDs de regra dos padrões: os declarados (item de lista que abre com o ID entre crases) e os retirados, que ainda
+ * nomeiam a regra que os absorveu. Exemplos no corpo do padrão não entram.
+ */
+export function loadRuleIds(dir = standardsDir): Set<string> {
+  const ids = new Set<string>();
+  for (const file of walk(dir))
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const declared = DECLARED_ID.exec(line);
+      if (declared) ids.add(declared[1]);
+      else if (line.startsWith("*IDs retirados:*")) for (const m of line.matchAll(ID)) ids.add(m[0]);
+    }
+  return ids;
+}
+
 /** Docs aplicáveis a um conjunto de stacks ("all" sempre entra), opcionalmente filtrados por fase. */
 export function forStacks(docs: Doc[], stacks: string[], phase?: Phase): Doc[] {
   const set = new Set(["all", ...stacks]);
