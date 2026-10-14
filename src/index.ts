@@ -11,7 +11,7 @@ import { evaluateCommitMessage } from "./hooks/policy.js";
 import { checkLanguage } from "./language.js";
 import { checkReferences, checkReferencesFiles, formatFindings } from "./references.js";
 
-const server = new McpServer({ name: "ds-mcp", version: "0.2.3" });
+const server = new McpServer({ name: "ds-mcp", version: "0.2.4" });
 
 // Recarrega a cada chamada: editar um .md reflete sem reiniciar o servidor.
 const catalog = () => loadCatalog();
