@@ -31,8 +31,23 @@ summary: Documente o porquê, não a origem. Código não é índice de document
 - `DOC-010` Referência aponta para a **fonte canônica** da decisão e para nada além: sem cadeia (código → issue → PR → doc → doc). Use somente ID estável (`ADR-0017`, os 4 dígitos do arquivo `docs/adr/0017-*.md`), nunca URL, âncora ou número de linha, e uma referência por ponto.
 - `DOC-011` Só cite ADR/spec que você **leu** e confirmou que diz o que o comentário afirma. Nunca invente ou "lembre" um número.
 - `DOC-012` Estas regras valem para o que você escreve ou modifica. Não remova nem reescreva comentários e referências existentes fora do escopo da tarefa (SCOPE-001). Se um comentário que você já está alterando tem referência obsoleta, corrija-o.
+- `DOC-013` Toda decisão de spec ou PRD tem **um** destino, escolhido quando a spec é escrita (tabela abaixo). Spec e PRD não são fonte canônica (DOC-010): fecham, são superados e não levam marca de superação. Por isso o código não os cita, e o ADR não os copia.
 
 *IDs retirados:* DOC-009 (→ DOC-002).
+
+## Para onde vai cada decisão de spec (DOC-013)
+
+| Destino | Quando |
+|---|---|
+| ADR | A decisão é difícil de reverter, surpreende sem contexto e resultou de uma escolha real entre alternativas, **e** algum código vai precisar defendê-la |
+| Comentário local | O porquê cabe em duas frases junto do código (DOC-002) |
+| Glossário | A decisão é de vocabulário |
+| Teste ou contrato | É comportamento verificável, e o teste é o guarda |
+| Fica na spec | Escopo do dia, história de usuário, valor provisório, preço |
+
+- **Teste da citação:** se nenhum código vai citar a decisão, ela não vira ADR.
+- Uma decisão entra em **no máximo um** ADR.
+- No código, o ID de decisão (`M8`, `D5`) vem com o ADR que o define na mesma referência: `ADR-0035 M8`, `D5 do ADR-0012`. Sozinho, o ID é local a um documento, e o `M8` de um PRD não é o `M8` de outro.
 
 ## Quando referenciar o quê
 
@@ -44,7 +59,7 @@ summary: Documente o porquê, não a origem. Código não é índice de document
 | API spec | ⚠️ quando o contrato não é evidente |
 | Issue / Ticket | ❌ (DOC-004) |
 | PR / Conversa | ❌ nunca |
-| Documento de planejamento | ❌ normalmente não |
+| Documento de planejamento (spec, PRD) | ❌ a decisão vai para o destino do DOC-013 |
 
 ## Exemplos
 

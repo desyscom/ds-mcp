@@ -85,6 +85,18 @@ s = run("session-start", { cwd: codes });
 assert.match(s, /ticketKeyIgnore\): CST/);
 assert.match(s, /"cst": IGNORADO/);
 
+// ---- .ds-mcp.json: decisionIdPrefixes liga o alerta de ID de decisão solto ----
+const ids = mkdtempSync(join(tmpdir(), "ds-hook-ids-"));
+writeFileSync(join(ids, ".ds-mcp.json"), JSON.stringify({ decisionIdPrefixes: ["M", "D", "m"] }));
+const LOOSE = { file_path: "src/a.ts", content: "// O cancelamento só vale até 24h (M8 e M9).\nconst a = 1;" };
+assert.equal(pre("Write", LOOSE), ""); // sem a lista, desligado
+o = specific(pre("Write", LOOSE, ids));
+assert.equal(o.permissionDecision, undefined); // alerta, não bloqueia
+assert.match(o.additionalContext, /DOC-013/);
+s = run("session-start", { cwd: ids });
+assert.match(s, /decisionIdPrefixes\): M, D/);
+assert.match(s, /"m": IGNORADO/);
+
 // ---- PREC-003: o agente não edita a própria exceção nem desliga hooks ----
 assert.equal(specific(pre("Write", { file_path: ".ds-mcp.json", content: '{"disable":[]}' })).permissionDecision, "ask");
 assert.equal(specific(pre("Edit", { file_path: join(proj, ".ds-mcp.json"), old_string: "[]", new_string: "[1]" })).permissionDecision, "ask");

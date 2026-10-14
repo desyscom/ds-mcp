@@ -27,6 +27,9 @@ assert.match(impl, /DOC-004/);
 assert.doesNotMatch(impl, /NODE-002/); // nestjs não carregado
 const vocab = await call("get_standard", { id: "all/vocabulary" });
 assert.match(vocab, /smoke test/);
+const doc = await call("get_standard", { id: "all/documentation" });
+assert.match(doc, /`DOC-013`/);
+assert.match(doc, /Teste da citação/);
 console.log("get_guardrails / get_standard: ok");
 
 // ---- check_references ----

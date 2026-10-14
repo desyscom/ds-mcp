@@ -6,7 +6,7 @@ import { z } from "zod";
 import { forStacks, loadCatalog, standardsDir, type Doc } from "./catalog.js";
 import { checkProject } from "./checks.js";
 import { collectChanges, commitsSince } from "./gitdiff.js";
-import { loadProjectConfig } from "./hooks/config.js";
+import { loadProjectConfig, scanOptions } from "./hooks/config.js";
 import { evaluateCommitMessage } from "./hooks/policy.js";
 import { checkLanguage } from "./language.js";
 import { checkReferences, checkReferencesFiles, formatFindings } from "./references.js";
@@ -74,7 +74,8 @@ server.registerTool(
   {
     description:
       "Escaneia comentários e nomes de teste atrás de referências indevidas (issue, PR, ticket, conversa, URL, TODO com ref) " +
-      "e referências a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudanças.",
+      "e referências a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). " +
+      "Com `decisionIdPrefixes` no `.ds-mcp.json`, alerta ID de decisão sem o ADR (DOC-013). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudanças.",
     inputSchema: sourceArgs,
   },
   async (args) => {
@@ -82,7 +83,7 @@ server.registerTool(
     const { path, diff, repo, base, limit } = args;
     // `diff` não diz de que projeto veio: só path e repo acham o `.ds-mcp.json`.
     const from = repo ?? path;
-    const scan = from ? { ticketKeyIgnore: loadProjectConfig(resolve(from)).ticketKeyIgnore } : {};
+    const scan = from ? scanOptions(loadProjectConfig(resolve(from))) : {};
     if (repo) {
       const changes = collectChanges(resolve(repo), base);
       if (!changes) return { ...text(`"${repo}" não é um repositório git.`), isError: true };

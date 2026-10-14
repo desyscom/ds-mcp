@@ -13,4 +13,4 @@ summary: Definições usadas pelas regras (evidência, dado sensível, etc.).
 - **Fronteira externa**: ponto onde dados entram no sistema (HTTP, CLI, filas, arquivos, env).
 - **Consumidor**: qualquer código que usa um contrato — frontend, outro serviço, DTO compartilhado, client gerado, testes.
 - **Mudança breaking**: remover, renomear ou mudar o tipo de campo/endpoint/status/autenticação de um contrato existente.
-- **Fonte canônica**: o único artefato que consolida uma decisão (normalmente um ADR em `docs/adr/`).
+- **Fonte canônica**: o único artefato que consolida uma decisão (normalmente um ADR em `docs/adr/`). Spec e PRD não são (DOC-013).

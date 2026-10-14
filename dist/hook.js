@@ -3603,6 +3603,7 @@ var NOT_TICKET = [
   "HH"
 ];
 var TICKET_PREFIX = /^[A-Z]{2,10}$/;
+var DECISION_PREFIX = /^[A-Z]{1,3}$/;
 var ticketKeyCache = /* @__PURE__ */ new Map();
 function ticketKey(ignore = []) {
   const key = ignore.join("|");
@@ -3610,6 +3611,16 @@ function ticketKey(ignore = []) {
   if (!re) {
     re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
     ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+var decisionIdCache = /* @__PURE__ */ new Map();
+function decisionId(prefixes) {
+  const key = prefixes.join("|");
+  let re = decisionIdCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?:${key})[1-9]\\d{0,2}\\b`);
+    decisionIdCache.set(key, re);
   }
   return re;
 }
@@ -3643,6 +3654,8 @@ function scanText(text, kind, opts) {
     if (RE.adr.test(text)) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
     if (RE.spec.test(text)) add("DOC-003", "warn", "refer\xEAncia normativa/spec \u2014 confirme que se enquadra em DOC-003");
     if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em coment\xE1rio \u2014 prefira ID est\xE1vel da fonte can\xF4nica");
+    if (opts.decisionIdPrefixes?.length && decisionId(opts.decisionIdPrefixes).test(text) && !/\bADR\b/i.test(text))
+      add("DOC-013", "warn", "ID de decis\xE3o sem o ADR \u2014 o ID \xE9 local ao documento que o define; qualifique-o (`ADR-0035 M8`) ou explique localmente");
   }
   return out;
 }
@@ -3683,7 +3696,17 @@ function parseDiff(diff) {
 
 // src/hooks/config.ts
 var MIN_REASON = 10;
-var empty = (root) => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
+var empty = (root) => ({
+  stacks: [],
+  disable: [],
+  invalidDisable: [],
+  ticketKeyIgnore: [],
+  invalidTicketKeyIgnore: [],
+  decisionIdPrefixes: [],
+  invalidDecisionIdPrefixes: [],
+  root
+});
+var scanOptions = (cfg) => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
 function loadProjectConfig(start) {
   let dir = resolve(start);
   for (let i = 0; i < 8; i++) {
@@ -3702,6 +3725,10 @@ function loadProjectConfig(start) {
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
           if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
           else cfg.invalidTicketKeyIgnore.push(String(p));
+        }
+        for (const p of Array.isArray(raw.decisionIdPrefixes) ? raw.decisionIdPrefixes : []) {
+          if (typeof p === "string" && DECISION_PREFIX.test(p)) cfg.decisionIdPrefixes.push(p);
+          else cfg.invalidDecisionIdPrefixes.push(String(p));
         }
         return cfg;
       } catch {
@@ -4158,7 +4185,7 @@ function evaluateTool(input, cwd, root, scan) {
   }
 }
 function preToolUse(input, cfg, cwd) {
-  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, { ticketKeyIgnore: cfg.ticketKeyIgnore }), cfg);
+  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, scanOptions(cfg)), cfg);
   const deny = vs.filter((x) => x.level === "deny");
   const ask = vs.filter((x) => x.level === "ask");
   const warn = vs.filter((x) => x.level === "warn");
@@ -4202,7 +4229,7 @@ function stopGate(input, cfg, cwd) {
   if (!changes) return;
   const root = cfg.root ?? cwd;
   const found = [];
-  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join5(changes.gitRoot, file), lines, root, { ticketKeyIgnore: cfg.ticketKeyIgnore }));
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join5(changes.gitRoot, file), lines, root, scanOptions(cfg)));
   for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" \xE9 dado sens\xEDvel e est\xE1 version\xE1vel (SEC-003). Remova do \xEDndice / adicione ao .gitignore.` });
   const blocking = applyConfig(found, cfg).filter((x) => x.level === "deny");
@@ -4231,7 +4258,9 @@ function sessionStart(cfg, input, cwd) {
     ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
     ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigat\xF3rio, m\xEDn. 10 caracteres); a regra continua ativa`),
     ...cfg.ticketKeyIgnore.length ? [`  - prefixos que n\xE3o s\xE3o ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : [],
-    ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo \xE9 de 2 a 10 letras mai\xFAsculas)`)
+    ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo \xE9 de 2 a 10 letras mai\xFAsculas)`),
+    ...cfg.decisionIdPrefixes.length ? [`  - prefixos de ID de decis\xE3o (decisionIdPrefixes): ${cfg.decisionIdPrefixes.join(", ")}; o ID vem com o ADR que o define (DOC-013)`] : [],
+    ...cfg.invalidDecisionIdPrefixes.map((p) => `  - decisionIdPrefixes "${p}": IGNORADO em .ds-mcp.json (prefixo \xE9 de 1 a 3 letras mai\xFAsculas)`)
   ];
   process.stdout.write(
     [

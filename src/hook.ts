@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { loadProjectConfig, type ProjectConfig } from "./hooks/config.js";
+import { loadProjectConfig, scanOptions, type ProjectConfig } from "./hooks/config.js";
 import { evaluateAddedLines, evaluateBash, evaluateRead, evaluateWrite, isSensitivePath, type Violation } from "./hooks/policy.js";
 import { collectChanges, git } from "./gitdiff.js";
 import type { ScanOptions } from "./references.js";
@@ -57,7 +57,7 @@ function evaluateTool(input: any, cwd: string, root: string, scan: ScanOptions):
 }
 
 function preToolUse(input: any, cfg: ProjectConfig, cwd: string) {
-  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, { ticketKeyIgnore: cfg.ticketKeyIgnore }), cfg);
+  const vs = applyConfig(evaluateTool(input, cwd, cfg.root ?? cwd, scanOptions(cfg)), cfg);
   const deny = vs.filter((x) => x.level === "deny");
   const ask = vs.filter((x) => x.level === "ask");
   const warn = vs.filter((x) => x.level === "warn");
@@ -101,7 +101,7 @@ function stopGate(input: any, cfg: ProjectConfig, cwd: string) {
   const root = cfg.root ?? cwd;
   const found: Violation[] = [];
 
-  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join(changes.gitRoot, file), lines, root, { ticketKeyIgnore: cfg.ticketKeyIgnore }));
+  for (const [file, lines] of changes.added) found.push(...evaluateAddedLines(join(changes.gitRoot, file), lines, root, scanOptions(cfg)));
   // SEC-003: dado sensível versionável (modificado ou não ignorado pelo git)
   for (const f of changes.files.filter(isSensitivePath))
     found.push({ rule: "SEC-003", level: "deny", message: `"${f}" é dado sensível e está versionável (SEC-003). Remova do índice / adicione ao .gitignore.` });
@@ -133,6 +133,8 @@ function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
     ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigatório, mín. 10 caracteres); a regra continua ativa`),
     ...(cfg.ticketKeyIgnore.length ? [`  - prefixos que não são ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : []),
     ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo é de 2 a 10 letras maiúsculas)`),
+    ...(cfg.decisionIdPrefixes.length ? [`  - prefixos de ID de decisão (decisionIdPrefixes): ${cfg.decisionIdPrefixes.join(", ")}; o ID vem com o ADR que o define (DOC-013)`] : []),
+    ...cfg.invalidDecisionIdPrefixes.map((p) => `  - decisionIdPrefixes "${p}": IGNORADO em .ds-mcp.json (prefixo é de 1 a 3 letras maiúsculas)`),
   ];
   process.stdout.write(
     [
