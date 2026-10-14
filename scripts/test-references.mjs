@@ -116,6 +116,32 @@ for (const t of [
   "Alinhado na call de ontem.",
 ]) fires(t);
 
+// ---- número com `#` que não é issue: decisão de ADR, regra de anexo e norma ----
+for (const t of [
+  "Camada montada uma vez por nota (ADR-002 #5/#7).",
+  "Chave tipada que decide o ramo do ICMS (ADR-002 #4 / adendo 3).",
+  "Montada por item (ADR-002 #7 / ADR-008 G2).",
+  "Espelha a regra da recepção (ANEXO_I RN #30/#32).",
+  "O nome do prestador é obrigatório (RN #203).",
+  "Identificação estrangeira vedada (RN #244/#247 · #282/#285).",
+  "O endereço do prestador quando `tpEmit=1` (#202/#206 do anexo) fica de fora.",
+  "A RN de cabeçalho (#154 do anexo) segue advisory.",
+  "Abre o PKCS#12 do A1; a chave chega em PKCS#8.",
+  "O contêiner é o PKCS #12, com a senha do emitente.",
+]) passes(t);
+for (const t of [
+  "Segue a ADR-24 de plataforma, #1083.", // separado do ADR por vírgula: é a issue
+  "Agenda o envio (ADR-23 de plataforma, A7 a A9; #1082).",
+  "Vem do ADR-002 / PRD #16.",
+  "ADR-12 #872 fixou o limite.", // três dígitos colados ao ADR: é a issue
+  "Validação local de RN (#212).",
+  "Convive com o #154, ambas advisory.",
+]) fires(t);
+n++;
+assert.deepEqual(rules("TODO: revisar a RN #203"), ["SCOPE-001/warn"], "RN no TODO não é referência a issue");
+n++;
+assert.ok(rules("Camada montada uma vez por nota (ADR-002 #5/#7).").includes("DOC-005/warn"), "o ADR continua avisado pelo DOC-005");
+
 // ---- referência a ADR: exemplo de formato entre crases não cita; o ID sozinho entre crases cita ----
 const citesAdr = (text) => rules(text).includes("DOC-005/warn");
 for (const t of [
