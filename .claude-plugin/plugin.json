@@ -3,12 +3,11 @@
   "version": "0.2.3",
   "description": "Guardrails, padrões e hooks de desenvolvimento (MCP ds-mcp + hooks de bloqueio)",
   "author": { "name": "Roberto Godinho" },
-  "types": "./types/index.d.ts",
   "userConfig": {
     "mergeMethod": {
       "type": "string",
-      "title": "Estratégia do Merge (clean)",
-      "description": "Como o botão Merge (clean) faz o merge do PR: squash, merge ou rebase",
+      "title": "Estratégia do /merge-clean",
+      "description": "Como o /merge-clean faz o merge do PR: squash, merge ou rebase",
       "default": "squash"
     }
   }
