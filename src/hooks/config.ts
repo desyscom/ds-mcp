@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { TICKET_PREFIX } from "../references.js";
+import { DECISION_PREFIX, TICKET_PREFIX, type ScanOptions } from "../references.js";
 
 /** Exceção permanente a uma regra. O motivo é obrigatório (PREC-003). */
 export interface Disabled {
@@ -20,12 +20,21 @@ export interface ProjectConfig {
   ticketKeyIgnore: string[];
   /** entradas de `ticketKeyIgnore` fora do formato (2 a 10 letras maiúsculas): ignoradas */
   invalidTicketKeyIgnore: string[];
+  /** prefixos de ID de decisão (`M`, `D`): o ID solto, sem o ADR na mesma referência, gera alerta */
+  decisionIdPrefixes: string[];
+  /** entradas de `decisionIdPrefixes` fora do formato (1 a 3 letras maiúsculas): ignoradas */
+  invalidDecisionIdPrefixes: string[];
   /** diretório onde o arquivo foi achado (raiz do projeto), ou null */
   root: string | null;
 }
 
 const MIN_REASON = 10;
-const empty = (root: string | null): ProjectConfig => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
+const empty = (root: string | null): ProjectConfig => ({
+  stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], decisionIdPrefixes: [], invalidDecisionIdPrefixes: [], root,
+});
+
+/** Opções do scanner de referências vindas do `.ds-mcp.json`. */
+export const scanOptions = (cfg: ProjectConfig): ScanOptions => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
 
 export function loadProjectConfig(start: string): ProjectConfig {
   let dir = resolve(start);
@@ -45,6 +54,10 @@ export function loadProjectConfig(start: string): ProjectConfig {
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
           if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
           else cfg.invalidTicketKeyIgnore.push(String(p));
+        }
+        for (const p of Array.isArray(raw.decisionIdPrefixes) ? raw.decisionIdPrefixes : []) {
+          if (typeof p === "string" && DECISION_PREFIX.test(p)) cfg.decisionIdPrefixes.push(p);
+          else cfg.invalidDecisionIdPrefixes.push(String(p));
         }
         return cfg;
       } catch {

@@ -51,9 +51,14 @@ const NOT_TICKET = [
 /** Prefixo aceito em `ticketKeyIgnore`: o mesmo formato que a chave de ticket exige. */
 export const TICKET_PREFIX = /^[A-Z]{2,10}$/;
 
+/** Prefixo aceito em `decisionIdPrefixes`: o ID de decisão é letra e número (`M8`, `D5`). */
+export const DECISION_PREFIX = /^[A-Z]{1,3}$/;
+
 export interface ScanOptions {
   /** prefixos extras que não são ticket, validados por TICKET_PREFIX */
   ticketKeyIgnore?: readonly string[];
+  /** prefixos de ID de decisão, validados por DECISION_PREFIX; sem eles, o alerta de ID solto fica desligado */
+  decisionIdPrefixes?: readonly string[];
 }
 
 const ticketKeyCache = new Map<string, RegExp>();
@@ -67,6 +72,21 @@ function ticketKey(ignore: readonly string[] = []): RegExp {
   if (!re) {
     re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
     ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+
+const decisionIdCache = new Map<string, RegExp>();
+/**
+ * ID de decisão sem zero à esquerda: `M01` é grupo do leiaute fiscal, não decisão. Não há lista embutida porque
+ * `S3`, `T1` e afins são siglas comuns, e só o projeto sabe quais prefixos seus documentos usam.
+ */
+function decisionId(prefixes: readonly string[]): RegExp {
+  const key = prefixes.join("|");
+  let re = decisionIdCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?:${key})[1-9]\\d{0,2}\\b`);
+    decisionIdCache.set(key, re);
   }
   return re;
 }
@@ -105,6 +125,9 @@ function scanText(text: string, kind: "comment" | "test", opts: ScanOptions): Om
     if (RE.adr.test(text)) add("DOC-005", "warn", "referência a ADR — só se for decisão/restrição não óbvia a preservar (DOC-003/005); explique localmente (DOC-002)");
     if (RE.spec.test(text)) add("DOC-003", "warn", "referência normativa/spec — confirme que se enquadra em DOC-003");
     if (RE.url.test(text) && !tracker) add("DOC-010", "warn", "URL em comentário — prefira ID estável da fonte canônica");
+    // O ADR qualifica qualquer ID da linha, na forma que o projeto usar: `ADR-35 M8`, `D5 do ADR-12`, `ADR plataforma-29, D5`.
+    if (opts.decisionIdPrefixes?.length && decisionId(opts.decisionIdPrefixes).test(text) && !/\bADR\b/i.test(text))
+      add("DOC-013", "warn", "ID de decisão sem o ADR — o ID é local ao documento que o define; qualifique-o (`ADR-0035 M8`) ou explique localmente");
   }
   return out;
 }

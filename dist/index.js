@@ -40438,6 +40438,7 @@ var NOT_TICKET = [
   "HH"
 ];
 var TICKET_PREFIX = /^[A-Z]{2,10}$/;
+var DECISION_PREFIX = /^[A-Z]{1,3}$/;
 var ticketKeyCache = /* @__PURE__ */ new Map();
 function ticketKey(ignore = []) {
   const key = ignore.join("|");
@@ -40445,6 +40446,16 @@ function ticketKey(ignore = []) {
   if (!re) {
     re = new RegExp(`\\b(?!(?:${[...NOT_TICKET, ...ignore].join("|")})-)[A-Z]{2,10}-\\d+\\b`);
     ticketKeyCache.set(key, re);
+  }
+  return re;
+}
+var decisionIdCache = /* @__PURE__ */ new Map();
+function decisionId(prefixes) {
+  const key = prefixes.join("|");
+  let re = decisionIdCache.get(key);
+  if (!re) {
+    re = new RegExp(`\\b(?:${key})[1-9]\\d{0,2}\\b`);
+    decisionIdCache.set(key, re);
   }
   return re;
 }
@@ -40478,6 +40489,8 @@ function scanText(text2, kind, opts) {
     if (RE.adr.test(text2)) add("DOC-005", "warn", "refer\xEAncia a ADR \u2014 s\xF3 se for decis\xE3o/restri\xE7\xE3o n\xE3o \xF3bvia a preservar (DOC-003/005); explique localmente (DOC-002)");
     if (RE.spec.test(text2)) add("DOC-003", "warn", "refer\xEAncia normativa/spec \u2014 confirme que se enquadra em DOC-003");
     if (RE.url.test(text2) && !tracker) add("DOC-010", "warn", "URL em coment\xE1rio \u2014 prefira ID est\xE1vel da fonte can\xF4nica");
+    if (opts.decisionIdPrefixes?.length && decisionId(opts.decisionIdPrefixes).test(text2) && !/\bADR\b/i.test(text2))
+      add("DOC-013", "warn", "ID de decis\xE3o sem o ADR \u2014 o ID \xE9 local ao documento que o define; qualifique-o (`ADR-0035 M8`) ou explique localmente");
   }
   return out;
 }
@@ -40631,7 +40644,17 @@ function commitsSince(cwd, base) {
 import { existsSync as existsSync3, readFileSync as readFileSync5 } from "node:fs";
 import { dirname as dirname2, join as join5, resolve as resolve2 } from "node:path";
 var MIN_REASON = 10;
-var empty = (root) => ({ stacks: [], disable: [], invalidDisable: [], ticketKeyIgnore: [], invalidTicketKeyIgnore: [], root });
+var empty = (root) => ({
+  stacks: [],
+  disable: [],
+  invalidDisable: [],
+  ticketKeyIgnore: [],
+  invalidTicketKeyIgnore: [],
+  decisionIdPrefixes: [],
+  invalidDecisionIdPrefixes: [],
+  root
+});
+var scanOptions = (cfg) => ({ ticketKeyIgnore: cfg.ticketKeyIgnore, decisionIdPrefixes: cfg.decisionIdPrefixes });
 function loadProjectConfig(start) {
   let dir = resolve2(start);
   for (let i = 0; i < 8; i++) {
@@ -40650,6 +40673,10 @@ function loadProjectConfig(start) {
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
           if (typeof p === "string" && TICKET_PREFIX.test(p)) cfg.ticketKeyIgnore.push(p);
           else cfg.invalidTicketKeyIgnore.push(String(p));
+        }
+        for (const p of Array.isArray(raw.decisionIdPrefixes) ? raw.decisionIdPrefixes : []) {
+          if (typeof p === "string" && DECISION_PREFIX.test(p)) cfg.decisionIdPrefixes.push(p);
+          else cfg.invalidDecisionIdPrefixes.push(String(p));
         }
         return cfg;
       } catch {
@@ -40872,14 +40899,14 @@ var ONE = "Informe exatamente um entre `path`, `diff` e `repo`.";
 server.registerTool(
   "check_references",
   {
-    description: "Escaneia coment\xE1rios e nomes de teste atr\xE1s de refer\xEAncias indevidas (issue, PR, ticket, conversa, URL, TODO com ref) e refer\xEAncias a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudan\xE7as.",
+    description: "Escaneia coment\xE1rios e nomes de teste atr\xE1s de refer\xEAncias indevidas (issue, PR, ticket, conversa, URL, TODO com ref) e refer\xEAncias a ADR/spec que exigem justificativa (DOC-003..006, DOC-010, SCOPE-001). Com `decisionIdPrefixes` no `.ds-mcp.json`, alerta ID de decis\xE3o sem o ADR (DOC-013). Informe `path` (auditoria), `diff` OU `repo` (+`base`) para revisar mudan\xE7as.",
     inputSchema: sourceArgs
   },
   async (args) => {
     if (!oneSource(args)) return { ...text(ONE), isError: true };
     const { path, diff, repo, base, limit } = args;
     const from = repo ?? path;
-    const scan = from ? { ticketKeyIgnore: loadProjectConfig(resolve4(from)).ticketKeyIgnore } : {};
+    const scan = from ? scanOptions(loadProjectConfig(resolve4(from))) : {};
     if (repo) {
       const changes = collectChanges(resolve4(repo), base);
       if (!changes) return { ...text(`"${repo}" n\xE3o \xE9 um reposit\xF3rio git.`), isError: true };

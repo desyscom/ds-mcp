@@ -159,7 +159,7 @@ export interface WriteInput {
   after: string;
   /** raiz do projeto, para achar docs/glossary.md */
   root?: string;
-  /** `ticketKeyIgnore` do `.ds-mcp.json` */
+  /** `ticketKeyIgnore` e `decisionIdPrefixes` do `.ds-mcp.json` */
   scan?: ScanOptions;
 }
 

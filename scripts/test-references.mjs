@@ -54,6 +54,35 @@ assert.deepEqual(cfg.ticketKeyIgnore, ["CST", "CSOSN"]);
 assert.deepEqual(cfg.invalidTicketKeyIgnore, ["cst", "N12", "X", "5", "ABCDEFGHIJK"]);
 rmSync(proj, { recursive: true, force: true });
 
+// ---- ID de decisão solto: só com decisionIdPrefixes, e o ADR na mesma linha qualifica ----
+const D = { decisionIdPrefixes: ["M", "D", "P"] };
+const loose = (text, opts) => rules(text, opts).includes("DOC-013/warn");
+for (const t of [
+  "Emite o grupo M01 do leiaute antes dos totais.",
+  "Grava o XML no S3 antes de responder.",
+  "A emissão não espera a autorização (ADR-35 M8).",
+  "D5 do ADR-12: o lote fecha às 18h.",
+  "Segue o ADR plataforma-29, D5: o certificado fica no cofre.",
+  "Calcula o MD5 do arquivo e o P2P fica fora.",
+]) {
+  n++;
+  assert.ok(!loose(t, D), `não deveria alertar ID de decisão: ${t} → ${rules(t, D)}`);
+}
+for (const t of ["O cancelamento só vale até 24h (M8 e M9).", "P3: o desconto não acumula com a promoção."]) {
+  n++;
+  assert.ok(loose(t, D), `deveria alertar ID de decisão: ${t}`);
+}
+n++;
+assert.ok(!loose("O cancelamento só vale até 24h (M8 e M9)."), "sem decisionIdPrefixes, o alerta fica desligado");
+
+const idsProj = mkdtempSync(join(tmpdir(), "ds-refs-ids-"));
+writeFileSync(join(idsProj, ".ds-mcp.json"), JSON.stringify({ decisionIdPrefixes: ["M", "DE", "m", "M1", "ABCD", 5] }));
+const idsCfg = loadProjectConfig(idsProj);
+n++;
+assert.deepEqual(idsCfg.decisionIdPrefixes, ["M", "DE"]);
+assert.deepEqual(idsCfg.invalidDecisionIdPrefixes, ["m", "M1", "ABCD", "5"]);
+rmSync(idsProj, { recursive: true, force: true });
+
 // ---- conversa: ordinal e palavras comuns do código não são citação ----
 for (const t of [
   "reset malicioso ou por engenharia social derruba o segundo fator em silêncio, e este e-mail é",
