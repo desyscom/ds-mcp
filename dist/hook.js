@@ -3570,49 +3570,231 @@ function loadRuleIds(dir = standardsDir) {
   return ids;
 }
 
-// src/references.ts
+// src/comments.ts
 var SLASH_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".cs", ".go", ".kt", ".rs", ".c", ".cpp", ".css", ".scss"]);
 var HASH_EXT = /* @__PURE__ */ new Set([".py", ".sh", ".rb", ".yml", ".yaml", ".toml"]);
-var MAX_FILE_BYTES = 512 * 1024;
-var SLASH_OPEN = /(?<!:)\/\/|(?<![^\s{(;,])\/\*/g;
-function slashComment(line, open) {
-  if (!open && /^\s*\*/.test(line)) return { text: line.trim(), open: false };
-  const parts = [];
-  let start = 0;
-  let from = 0;
-  while (from < line.length) {
-    if (open) {
-      const end = line.indexOf("*/", from);
-      parts.push(line.slice(start, end < 0 ? void 0 : end + 2));
-      if (end < 0) break;
-      open = false;
-      from = end + 2;
+var C_LIKE = { line: true, quote: "char", backtick: null, regex: false, triple: false, verbatim: false };
+var JS = { ...C_LIKE, quote: "string", backtick: "template", regex: true };
+var DIALECTS = {
+  ".ts": JS,
+  ".tsx": JS,
+  ".js": JS,
+  ".jsx": JS,
+  ".mjs": JS,
+  ".cjs": JS,
+  ".css": { ...C_LIKE, line: false, quote: "string" },
+  ".scss": { ...C_LIKE, quote: "string" },
+  ".go": { ...C_LIKE, backtick: "raw" },
+  ".kt": { ...C_LIKE, backtick: "raw", triple: true },
+  ".java": { ...C_LIKE, triple: true },
+  ".cs": { ...C_LIKE, triple: true, verbatim: true }
+};
+var KEYWORDS = /* @__PURE__ */ new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await"]);
+var WORD = /[\p{ID_Continue}$]/u;
+var CHAR_LITERAL = /'(?:\\.[^'\n]{0,9}|[^\\'\n])'/y;
+var isEol = (c) => c === "\n" || c === "\r";
+function quotedEnd(src, i, q) {
+  let j = i + 1;
+  while (j < src.length) {
+    const c = src[j];
+    if (c === "\\") j += 2;
+    else if (c === q) return j + 1;
+    else if (isEol(c)) return j;
+    else j++;
+  }
+  return j;
+}
+function regexEnd(src, i) {
+  let j = i + 1;
+  let inClass = false;
+  while (j < src.length) {
+    const c = src[j];
+    if (isEol(c)) return j;
+    if (c === "\\") {
+      j += 2;
       continue;
     }
-    SLASH_OPEN.lastIndex = from;
-    const m = SLASH_OPEN.exec(line);
-    if (!m) break;
-    if (m[0] === "//") {
-      parts.push(line.slice(m.index + 2));
-      break;
+    if (c === "/" && !inClass) {
+      j++;
+      while (/[a-z]/i.test(src[j] ?? "")) j++;
+      return j;
     }
-    open = true;
-    start = m.index;
-    from = m.index + 2;
+    if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    j++;
   }
-  return { text: parts.length ? parts.join(" ") : null, open };
+  return j;
+}
+function verbatimEnd(src, i) {
+  let j = i + 2;
+  while (j < src.length) {
+    if (src[j] === '"') {
+      if (src[j + 1] !== '"') return j + 1;
+      j += 2;
+    } else j++;
+  }
+  return j;
+}
+function lex(src, d, start) {
+  const spans = [];
+  const n = src.length;
+  const braces = [];
+  let state = start;
+  let operand = false;
+  let i = 0;
+  if (state === "block") {
+    while (i < n) {
+      const eol = src.indexOf("\n", i);
+      const lineEnd = eol < 0 ? n : eol;
+      const line = src.slice(i, lineEnd);
+      if (!/^\s*\*/.test(line)) break;
+      const close = line.indexOf("*/");
+      if (close >= 0) {
+        spans.push({ start: i, end: i + close + 2 });
+        i += close + 2;
+        break;
+      }
+      spans.push({ start: i, end: lineEnd });
+      i = lineEnd + 1;
+    }
+    state = "code";
+  }
+  while (i < n) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (state === "template") {
+      if (c === "\\") {
+        i += 2;
+      } else if (c === "`") {
+        state = "code";
+        operand = true;
+        i++;
+      } else if (c === "$" && next === "{") {
+        braces.push(0);
+        state = "code";
+        operand = false;
+        i += 2;
+      } else {
+        i++;
+      }
+      continue;
+    }
+    if (state === "raw" || state === "triple") {
+      const close = state === "raw" ? "`" : '"""';
+      const e = src.indexOf(close, i);
+      if (e < 0) break;
+      state = "code";
+      operand = true;
+      i = e + close.length;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      const e = src.indexOf("*/", i + 2);
+      const end = e < 0 ? n : e + 2;
+      spans.push({ start: i, end });
+      i = end;
+      continue;
+    }
+    if (c === "/" && next === "/" && d.line && src[i - 1] !== ":") {
+      let e = i + 2;
+      while (e < n && !isEol(src[e])) e++;
+      spans.push({ start: i + 2, end: e });
+      i = e;
+      continue;
+    }
+    if (d.triple && src.startsWith('"""', i)) {
+      state = "triple";
+      i += 3;
+      continue;
+    }
+    if (c === "`" && d.backtick) {
+      state = d.backtick;
+      i++;
+      continue;
+    }
+    if (d.verbatim && c === "@" && next === '"') {
+      i = verbatimEnd(src, i);
+      operand = true;
+    } else if (c === '"' || c === "'" && d.quote === "string") {
+      i = quotedEnd(src, i, c);
+      operand = true;
+    } else if (c === "'") {
+      CHAR_LITERAL.lastIndex = i;
+      i = CHAR_LITERAL.test(src) ? CHAR_LITERAL.lastIndex : i + 1;
+      operand = true;
+    } else if (c === "/" && d.regex && !operand && src[i - 1] !== "<") {
+      i = regexEnd(src, i);
+      operand = true;
+    } else if (WORD.test(c)) {
+      let e = i + 1;
+      while (e < n && WORD.test(src[e])) e++;
+      operand = !KEYWORDS.has(src.slice(i, e));
+      i = e;
+    } else if ((c === "+" || c === "-") && next === c) {
+      i += 2;
+    } else if (c === "}" && braces.length && braces[braces.length - 1] === 0) {
+      braces.pop();
+      state = "template";
+      i++;
+    } else {
+      if (braces.length && c === "{") braces[braces.length - 1]++;
+      if (braces.length && c === "}") braces[braces.length - 1]--;
+      if (!/\s/.test(c)) operand = c === ")" || c === "]" || c === "}";
+      i++;
+    }
+  }
+  return { spans, end: state };
+}
+function runs(lines) {
+  const out = [];
+  for (const l of lines) {
+    const last = out[out.length - 1];
+    if (last && l.n === last[last.length - 1].n + 1) last.push(l);
+    else out.push([l]);
+  }
+  return out;
+}
+function slashComments(run, d, out) {
+  const texts = run.map((l) => l.text);
+  if (run[0].n === 1 && texts[0].startsWith("#!")) texts[0] = "";
+  const src = texts.join("\n");
+  const starts = [];
+  let at = 0;
+  for (const t of texts) {
+    starts.push(at);
+    at += t.length + 1;
+  }
+  const lineAt = (pos) => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >> 1;
+      if (starts[mid] <= pos) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const found = /* @__PURE__ */ new Map();
+  const collect = (spans, skipKnown) => {
+    const known = new Set(found.keys());
+    for (const { start, end } of spans) {
+      for (let k = lineAt(start); k <= lineAt(Math.max(start, end - 1)); k++) {
+        if (skipKnown && known.has(k)) continue;
+        const seg = src.slice(Math.max(start, starts[k]), Math.min(end, starts[k] + texts[k].length));
+        if (seg.trim()) found.set(k, [...found.get(k) ?? [], seg]);
+      }
+    }
+  };
+  const first = lex(src, d, /^\s*\*/.test(texts[0]) ? "block" : "code");
+  collect(first.spans, false);
+  if (first.end === "template" || first.end === "raw" || first.end === "triple") collect(lex(src, d, first.end).spans, true);
+  for (const [k, segs] of found) out.set(run[k].n, segs.join(" "));
 }
 function commentTexts(lines, ext) {
   const out = /* @__PURE__ */ new Map();
   if (SLASH_EXT.has(ext)) {
-    let open = false;
-    let prev = Number.NaN;
-    for (const { n, text } of lines) {
-      const c = slashComment(text, open && n === prev + 1);
-      open = c.open;
-      prev = n;
-      if (c.text !== null) out.set(n, c.text);
-    }
+    const d = DIALECTS[ext] ?? C_LIKE;
+    for (const run of runs(lines)) slashComments(run, d, out);
   } else if (HASH_EXT.has(ext)) {
     for (const { n, text } of lines) {
       if (text.trim().startsWith("#!")) continue;
@@ -3622,6 +3804,9 @@ function commentTexts(lines, ext) {
   }
   return out;
 }
+
+// src/references.ts
+var MAX_FILE_BYTES = 512 * 1024;
 function testTitle(line) {
   const m = /\b(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])(.*?)\1/.exec(line);
   return m ? m[2] : null;

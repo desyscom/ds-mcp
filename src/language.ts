@@ -2,7 +2,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { standardsDir } from "./catalog.js";
 import { collectChanges } from "./gitdiff.js";
-import { commentTexts, HASH_EXT, MAX_FILE_BYTES, parseDiff, SLASH_EXT, testTitle, walk, type Finding } from "./references.js";
+import { commentTexts, HASH_EXT, SLASH_EXT } from "./comments.js";
+import { MAX_FILE_BYTES, parseDiff, testTitle, walk, type Finding } from "./references.js";
 
 interface Entry {
   term: string;
