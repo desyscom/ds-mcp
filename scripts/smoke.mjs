@@ -21,15 +21,17 @@ assert.match(plan, /LANG-002/); // idioma vale também ao planejar
 assert.match(plan, /Glossário/); // glossário sempre vem junto
 assert.doesNotMatch(plan, /REACT-002/); // react só em implement/review
 assert.doesNotMatch(plan, /`DOC-001`/); // regras de documentação só em implement/review
+assert.match(plan, /`DOC-013`/); // exceto o destino das decisões, que nasce ao escrever a spec
 const impl = await call("get_guardrails", { stacks: ["react"], phase: "implement" });
 assert.match(impl, /REACT-002/);
 assert.match(impl, /DOC-004/);
 assert.doesNotMatch(impl, /NODE-002/); // nestjs não carregado
 const vocab = await call("get_standard", { id: "all/vocabulary" });
 assert.match(vocab, /smoke test/);
-const doc = await call("get_standard", { id: "all/documentation" });
-assert.match(doc, /`DOC-013`/);
-assert.match(doc, /Teste da citação/);
+const decisions = await call("get_standard", { id: "all/decisions" });
+assert.match(decisions, /`DOC-013`/);
+assert.match(decisions, /Teste da citação/);
+assert.match(await call("get_standard", { id: "all/documentation" }), /DOC-013.*all\/decisions/);
 console.log("get_guardrails / get_standard: ok");
 
 // ---- check_references ----
