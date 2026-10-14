@@ -40907,7 +40907,7 @@ function evaluateCommitMessage(message, root) {
 }
 
 // src/index.ts
-var server = new McpServer({ name: "ds-mcp", version: "0.2.0" });
+var server = new McpServer({ name: "ds-mcp", version: "0.2.1" });
 var catalog = () => loadCatalog();
 var text = (t) => ({ content: [{ type: "text", text: t }] });
 var render = (d) => `# ${d.title}  \`${d.id}\` (${d.kind})
