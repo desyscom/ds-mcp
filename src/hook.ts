@@ -21,8 +21,13 @@ const emit = (o: unknown) => process.stdout.write(JSON.stringify(o));
 const pre = (extra: Record<string, unknown>) => emit({ hookSpecificOutput: { hookEventName: "PreToolUse", ...extra } });
 
 function applyConfig(vs: Violation[], cfg: ProjectConfig): Violation[] {
-  const off = new Set(cfg.disable.map((d) => d.rule));
-  return vs.filter((x) => !off.has(x.rule));
+  const byRule = new Map(cfg.disable.map((d) => [d.rule, d]));
+  return vs.flatMap((x) => {
+    const d = byRule.get(x.rule);
+    if (!d) return [x];
+    if (d.level !== "warn") return [];
+    return [x.level === "ask" ? { ...x, level: "warn" as const } : x];
+  });
 }
 
 // ---------- PreToolUse ----------
@@ -129,8 +134,9 @@ function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
     ? `Stacks do projeto (.ds-mcp.json): ${cfg.stacks.join(", ")}.`
     : 'Stacks do projeto não configuradas: crie `.ds-mcp.json` com {"stacks":["react","nestjs"]} ou informe-as ao chamar get_guardrails.';
   const exceptions = [
-    ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
-    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigatório, mín. 10 caracteres); a regra continua ativa`),
+    ...cfg.disable.map((d) =>
+      d.level === "warn" ? `  - ${d.rule} sem confirmação (ask vira aviso; deny continua): ${d.reason}` : `  - ${d.rule} desligada: ${d.reason}`),
+    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigatório, mín. 10 caracteres; level só aceita "warn"); a regra continua ativa`),
     ...(cfg.ticketKeyIgnore.length ? [`  - prefixos que não são ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : []),
     ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo é de 2 a 10 letras maiúsculas)`),
     ...(cfg.decisionIdPrefixes.length ? [`  - prefixos de ID de decisão (decisionIdPrefixes): ${cfg.decisionIdPrefixes.join(", ")}; o ID vem com o ADR que o define (DOC-013)`] : []),
@@ -143,6 +149,7 @@ function sessionStart(cfg: ProjectConfig, input: any, cwd: string) {
       "Princípio: o código é a fonte da verdade do comportamento atual; a documentação, das decisões e restrições. Não transforme o código em índice de documentação.",
       stacks,
       "Antes de planejar, implementar ou revisar, chame a tool get_guardrails do MCP ds-mcp com as stacks e phase=plan|implement|review. Detalhe de uma regra: get_standard.",
+      "Execução autônoma de spec aprovada (ex.: implement-spec): a spec e os tickets são o pedido explícito do que descrevem; suposição vai para o ticket e o relatório, não vira pergunta ao usuário (PREC-005).",
       "Hooks ativos — bloqueiam: ler .env/chaves, segredo em código, referência a issue/PR/ticket em comentário, desabilitar teste. Pedem confirmação: dependência nova ou atualização, IAM, supressão de lint, enfraquecer TLS/CORS.",
       "Comentários, docs, commits (Conventional Commits: tipo(escopo): descrição), PRs e issues em pt-BR (jargão técnico canônico não se traduz). Melhorias fora do escopo vão em 'Sugestões fora do escopo' no relatório final, não no código.",
     ].join("\n"),

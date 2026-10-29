@@ -3,10 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import { loadRuleIds } from "../catalog.js";
 import { DECISION_PREFIX, TICKET_PREFIX, type ScanOptions } from "../references.js";
 
-/** Exceção permanente a uma regra. O motivo é obrigatório (PREC-003). */
+/**
+ * Exceção permanente a uma regra. O motivo é obrigatório (PREC-003). Com `level: "warn"`, a regra não some: o pedido
+ * de confirmação (`ask`) vira aviso e o bloqueio (`deny`) continua.
+ */
 export interface Disabled {
   rule: string;
   reason: string;
+  level?: "warn";
 }
 
 /** `.ds-mcp.json` na raiz do projeto. Tudo opcional. */
@@ -51,7 +55,9 @@ export function loadProjectConfig(start: string): ProjectConfig {
         for (const d of Array.isArray(raw.disable) ? raw.disable : []) {
           const rule = typeof d === "string" ? d : typeof d?.rule === "string" ? d.rule : "?";
           const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
-          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
+          const level = d?.level;
+          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON && (level === undefined || level === "warn"))
+            cfg.disable.push(level === "warn" ? { rule, reason, level } : { rule, reason });
           else cfg.invalidDisable.push(rule);
         }
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
