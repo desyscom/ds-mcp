@@ -3982,7 +3982,9 @@ function loadProjectConfig(start) {
         for (const d of Array.isArray(raw.disable) ? raw.disable : []) {
           const rule = typeof d === "string" ? d : typeof d?.rule === "string" ? d.rule : "?";
           const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
-          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
+          const level = d?.level;
+          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON && (level === void 0 || level === "warn"))
+            cfg.disable.push(level === "warn" ? { rule, reason, level } : { rule, reason });
           else cfg.invalidDisable.push(rule);
         }
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {
@@ -4259,6 +4261,28 @@ var CONFIG_FILE = /(^|[\\/])\.ds-mcp\.json$/;
 var CLAUDE_SETTINGS = /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/;
 var HOOK_SWITCH = /disableAllHooks|enabledPlugins|"hooks"/;
 var TEST_FILE = /(\.(test|spec)\.[jt]sx?$)|(__tests__[\\/])|((^|[\\/])test_[\w-]+\.py$)|(_test\.(go|py)$)|(Tests?\.cs$)/i;
+var ENV_FILE_FLAG = /--env-file[=\s]+["']?$/;
+var NO_CONTENT_CMD = /* @__PURE__ */ new Set(["test", "[", "ls", "dir", "stat", "Test-Path", "source", "."]);
+var COPY_CMD = /* @__PURE__ */ new Set(["cp", "mv", "copy", "move", "Copy-Item", "Move-Item", "cpi", "mi"]);
+var unquote = (s) => s.replace(/^['"]|['"]$/g, "");
+function exposedSensitive(segment) {
+  const hits = [...segment.matchAll(SENSITIVE_TOKEN)].filter((m) => isSensitivePath(m[2]));
+  if (!hits.length) return null;
+  const words = segment.trim().split(/\s+/);
+  const cmd = words[0] === "sudo" ? words[1] : words[0];
+  if (NO_CONTENT_CMD.has(cmd)) return null;
+  if (COPY_CMD.has(cmd)) {
+    const args = words.slice(words.indexOf(cmd) + 1).filter((a) => !a.startsWith("-")).map(unquote);
+    const dest = args[args.length - 1] ?? "";
+    if (args.length >= 2 && (isSensitivePath(dest) || /[\\/]$/.test(dest))) return null;
+  }
+  for (const m of hits) {
+    const before = segment.slice(0, (m.index ?? 0) + m[1].length);
+    if (ENV_FILE_FLAG.test(before) || cmd === "dotenv" && /\s-e\s+["']?$/.test(before)) continue;
+    return m[2];
+  }
+  return null;
+}
 function installsPackage(segment) {
   const t = segment.trim().split(/\s+/);
   const at = (names) => t.findIndex((x) => names.includes(x));
@@ -4298,11 +4322,9 @@ function evaluateCommit(command, root) {
 function evaluateBash(command, root) {
   const out = [];
   if (!/\.gitignore\b/.test(command)) {
-    for (const m of command.matchAll(SENSITIVE_TOKEN)) {
-      if (!isSensitivePath(m[2])) continue;
-      out.push(v("SEC-001", "deny", `O comando toca "${m[2]}" (dado sens\xEDvel; SEC-001/SEC-003). Use o .env.example ou pe\xE7a ao usu\xE1rio.`));
-      break;
-    }
+    const hit = command.split(/&&|\|\||;|\|/).map(exposedSensitive).find((t) => t !== null);
+    if (hit)
+      out.push(v("SEC-001", "deny", `O comando toca "${hit}" (dado sens\xEDvel; SEC-001/SEC-003). Use o .env.example ou pe\xE7a ao usu\xE1rio. Carregar sem expor \xE9 permitido: --env-file, test/ls, source, ou cp/mv para outro arquivo sens\xEDvel ou para um diret\xF3rio terminado em "/".`));
   }
   if (/(^|[;&|]\s*)(printenv|env|set)\s*($|[;&|])/.test(command.trim()) || /\bGet-ChildItem\s+env:/i.test(command))
     out.push(v("SEC-001", "deny", "Listar todas as vari\xE1veis de ambiente pode expor segredos (SEC-001). Consulte uma vari\xE1vel espec\xEDfica e n\xE3o a imprima."));
@@ -4344,6 +4366,25 @@ var SECURITY_WEAKENING = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHO
 var TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|test)\s*\(|\.only\s*\(|pytest\.mark\.(skip|xfail)|@pytest\.mark\.skip|@Ignore\b|\[Ignore\]|\bt\.Skip\s*\(|@Disabled\b/;
 var LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
 var DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
+var DEP_BLOCKS = /* @__PURE__ */ new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]);
+var PKG_META = /* @__PURE__ */ new Set(["version", "homepage", "repository", "bugs", "funding", "license"]);
+function dependencyLines(source) {
+  const out = /* @__PURE__ */ new Set();
+  const fragment = !/^\s*\{/.test(source.find((l) => l.text.trim())?.text ?? "");
+  const stack = [];
+  for (const { n, text } of source) {
+    const key = /^\s*"([^"]+)"\s*:/.exec(text)?.[1];
+    if (key !== void 0 && DEP_LINE.test(text)) {
+      const inDeps = stack.some((k) => DEP_BLOCKS.has(k));
+      if (inDeps || fragment && stack.length === 0 && !PKG_META.has(key)) out.add(n);
+    }
+    const opens = (text.match(/\{/g) ?? []).length;
+    const closes = (text.match(/\}/g) ?? []).length;
+    for (let i = 0; i < opens; i++) stack.push(i === 0 && key !== void 0 ? key : "");
+    for (let i = 0; i < closes; i++) stack.pop();
+  }
+  return out;
+}
 function evaluateWrite(input) {
   const source = input.after.split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
   return evaluateAddedLines(input.path, addedLines(input.before, input.after), input.root, input.scan, source);
@@ -4392,8 +4433,9 @@ function evaluateAddedLines(path, added, root, scan = {}, source = added) {
       break;
     }
   if (file === "package.json") {
-    for (const { n, text } of added)
-      if (DEP_LINE.test(text)) {
+    const deps = dependencyLines(source);
+    for (const { n } of added)
+      if (deps.has(n)) {
         out.push(v("DEP-001", "ask", `package.json:${n} adiciona/altera depend\xEAncia. Verifique DEP-001, DEP-006 e informe o motivo (DEP-003); major s\xF3 com pedido (DEP-005).`));
         break;
       }
@@ -4411,8 +4453,13 @@ var fmt = (vs) => vs.map((x) => `- [${x.rule}] ${x.message}`).join("\n");
 var emit = (o) => process.stdout.write(JSON.stringify(o));
 var pre = (extra) => emit({ hookSpecificOutput: { hookEventName: "PreToolUse", ...extra } });
 function applyConfig(vs, cfg) {
-  const off = new Set(cfg.disable.map((d) => d.rule));
-  return vs.filter((x) => !off.has(x.rule));
+  const byRule = new Map(cfg.disable.map((d) => [d.rule, d]));
+  return vs.flatMap((x) => {
+    const d = byRule.get(x.rule);
+    if (!d) return [x];
+    if (d.level !== "warn") return [];
+    return [x.level === "ask" ? { ...x, level: "warn" } : x];
+  });
 }
 function evaluateTool(input, cwd, root, scan) {
   const ti = input.tool_input ?? {};
@@ -4512,8 +4559,8 @@ function sessionStart(cfg, input, cwd) {
   recordBase(input, cwd);
   const stacks = cfg.stacks.length ? `Stacks do projeto (.ds-mcp.json): ${cfg.stacks.join(", ")}.` : 'Stacks do projeto n\xE3o configuradas: crie `.ds-mcp.json` com {"stacks":["react","nestjs"]} ou informe-as ao chamar get_guardrails.';
   const exceptions = [
-    ...cfg.disable.map((d) => `  - ${d.rule} desligada: ${d.reason}`),
-    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigat\xF3rio, m\xEDn. 10 caracteres); a regra continua ativa`),
+    ...cfg.disable.map((d) => d.level === "warn" ? `  - ${d.rule} sem confirma\xE7\xE3o (ask vira aviso; deny continua): ${d.reason}` : `  - ${d.rule} desligada: ${d.reason}`),
+    ...cfg.invalidDisable.map((r) => `  - ${r}: IGNORADA em .ds-mcp.json (motivo obrigat\xF3rio, m\xEDn. 10 caracteres; level s\xF3 aceita "warn"); a regra continua ativa`),
     ...cfg.ticketKeyIgnore.length ? [`  - prefixos que n\xE3o s\xE3o ticket (ticketKeyIgnore): ${cfg.ticketKeyIgnore.join(", ")}`] : [],
     ...cfg.invalidTicketKeyIgnore.map((p) => `  - ticketKeyIgnore "${p}": IGNORADO em .ds-mcp.json (prefixo \xE9 de 2 a 10 letras mai\xFAsculas)`),
     ...cfg.decisionIdPrefixes.length ? [`  - prefixos de ID de decis\xE3o (decisionIdPrefixes): ${cfg.decisionIdPrefixes.join(", ")}; o ID vem com o ADR que o define (DOC-013)`] : [],
@@ -4526,6 +4573,7 @@ function sessionStart(cfg, input, cwd) {
       "Princ\xEDpio: o c\xF3digo \xE9 a fonte da verdade do comportamento atual; a documenta\xE7\xE3o, das decis\xF5es e restri\xE7\xF5es. N\xE3o transforme o c\xF3digo em \xEDndice de documenta\xE7\xE3o.",
       stacks,
       "Antes de planejar, implementar ou revisar, chame a tool get_guardrails do MCP ds-mcp com as stacks e phase=plan|implement|review. Detalhe de uma regra: get_standard.",
+      "Execu\xE7\xE3o aut\xF4noma de spec aprovada (ex.: implement-spec): a spec e os tickets s\xE3o o pedido expl\xEDcito do que descrevem; suposi\xE7\xE3o vai para o ticket e o relat\xF3rio, n\xE3o vira pergunta ao usu\xE1rio (PREC-005).",
       "Hooks ativos \u2014 bloqueiam: ler .env/chaves, segredo em c\xF3digo, refer\xEAncia a issue/PR/ticket em coment\xE1rio, desabilitar teste. Pedem confirma\xE7\xE3o: depend\xEAncia nova ou atualiza\xE7\xE3o, IAM, supress\xE3o de lint, enfraquecer TLS/CORS.",
       "Coment\xE1rios, docs, commits (Conventional Commits: tipo(escopo): descri\xE7\xE3o), PRs e issues em pt-BR (jarg\xE3o t\xE9cnico can\xF4nico n\xE3o se traduz). Melhorias fora do escopo v\xE3o em 'Sugest\xF5es fora do escopo' no relat\xF3rio final, n\xE3o no c\xF3digo."
     ].join("\n")

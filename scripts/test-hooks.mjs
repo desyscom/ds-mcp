@@ -78,6 +78,24 @@ const noReason = mkdtempSync(join(tmpdir(), "ds-hook-noreason-"));
 writeFileSync(join(noReason, ".ds-mcp.json"), JSON.stringify({ disable: ["DOC-004", { rule: "DOC-004" }, { rule: "DOC-004", reason: "curto" }] }));
 assert.equal(specific(pre("Write", BAD, noReason)).permissionDecision, "deny"); // sem motivo: regra continua ativa
 
+// ---- .ds-mcp.json: level "warn" rebaixa o ask e mantém o deny da mesma regra ----
+const soft = mkdtempSync(join(tmpdir(), "ds-hook-soft-"));
+writeFileSync(join(soft, ".ds-mcp.json"), JSON.stringify({ disable: [
+  { rule: "TEST-003", level: "warn", reason: "Execução autônoma de spec: lint revisado no PR" },
+  { rule: "DEP-001", level: "warn", reason: "Execução autônoma de spec: dependência vai para o relatório" },
+  { rule: "TEST-005", level: "block", reason: "Valor de level fora do formato aceito" },
+] }));
+o = specific(pre("Write", { file_path: "src/a.ts", content: "// eslint-disable-next-line no-console\nconsole.log(1);" }, soft));
+assert.equal(o.permissionDecision, undefined); // ask virou aviso
+assert.match(o.additionalContext, /TEST-003/);
+assert.equal(specific(pre("Write", { file_path: "src/a.spec.ts", content: "it.skip('faz algo', () => {});" }, soft)).permissionDecision, "deny");
+assert.equal(specific(pre("Bash", { command: "npm install zod" }, soft)).permissionDecision, undefined);
+assert.equal(specific(pre("Bash", { command: "rm src/a.spec.ts" }, soft)).permissionDecision, "ask"); // level inválido: regra inteira
+s = run("session-start", { cwd: soft });
+assert.match(s, /TEST-003 sem confirmação \(ask vira aviso; deny continua\)/);
+assert.match(s, /TEST-005: IGNORADA/);
+assert.match(s, /PREC-005/);
+
 // ---- .ds-mcp.json: ticketKeyIgnore solta o código do domínio, não a regra ----
 const codes = mkdtempSync(join(tmpdir(), "ds-hook-codes-"));
 writeFileSync(join(codes, ".ds-mcp.json"), JSON.stringify({ ticketKeyIgnore: ["CST", "cst"] }));

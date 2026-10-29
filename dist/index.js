@@ -40916,7 +40916,9 @@ function loadProjectConfig(start) {
         for (const d of Array.isArray(raw.disable) ? raw.disable : []) {
           const rule = typeof d === "string" ? d : typeof d?.rule === "string" ? d.rule : "?";
           const reason = typeof d?.reason === "string" ? d.reason.trim() : "";
-          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON) cfg.disable.push({ rule, reason });
+          const level = d?.level;
+          if (typeof d === "object" && d !== null && rule !== "?" && reason.length >= MIN_REASON && (level === void 0 || level === "warn"))
+            cfg.disable.push(level === "warn" ? { rule, reason, level } : { rule, reason });
           else cfg.invalidDisable.push(rule);
         }
         for (const p of Array.isArray(raw.ticketKeyIgnore) ? raw.ticketKeyIgnore : []) {

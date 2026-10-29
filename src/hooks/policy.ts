@@ -41,6 +41,36 @@ const CLAUDE_SETTINGS = /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/;
 const HOOK_SWITCH = /disableAllHooks|enabledPlugins|"hooks"/;
 const TEST_FILE =/(\.(test|spec)\.[jt]sx?$)|(__tests__[\\/])|((^|[\\/])test_[\w-]+\.py$)|(_test\.(go|py)$)|(Tests?\.cs$)/i;
 
+/**
+ * Usos que carregam ou movem o arquivo sensível sem pôr o conteúdo no output nem num nome versionável. A lista é de
+ * permissões: comando desconhecido que cite o arquivo continua bloqueado.
+ */
+const ENV_FILE_FLAG = /--env-file[=\s]+["']?$/;
+const NO_CONTENT_CMD = new Set(["test", "[", "ls", "dir", "stat", "Test-Path", "source", "."]);
+const COPY_CMD = new Set(["cp", "mv", "copy", "move", "Copy-Item", "Move-Item", "cpi", "mi"]);
+const unquote = (s: string) => s.replace(/^['"]|['"]$/g, "");
+
+/** Primeiro arquivo sensível que o segmento expõe (lê, versiona, copia para nome comum), ou null. */
+function exposedSensitive(segment: string): string | null {
+  const hits = [...segment.matchAll(SENSITIVE_TOKEN)].filter((m) => isSensitivePath(m[2]));
+  if (!hits.length) return null;
+  const words = segment.trim().split(/\s+/);
+  const cmd = words[0] === "sudo" ? words[1] : words[0];
+  if (NO_CONTENT_CMD.has(cmd)) return null;
+  if (COPY_CMD.has(cmd)) {
+    const args = words.slice(words.indexOf(cmd) + 1).filter((a) => !a.startsWith("-")).map(unquote);
+    const dest = args[args.length - 1] ?? "";
+    // o destino mantém o nome sensível: o .gitignore que cobre o original cobre a cópia
+    if (args.length >= 2 && (isSensitivePath(dest) || /[\\/]$/.test(dest))) return null;
+  }
+  for (const m of hits) {
+    const before = segment.slice(0, (m.index ?? 0) + m[1].length);
+    if (ENV_FILE_FLAG.test(before) || (cmd === "dotenv" && /\s-e\s+["']?$/.test(before))) continue;
+    return m[2];
+  }
+  return null;
+}
+
 /** O segmento instala um pacote *nomeado* (dependência nova)? `npm install` puro e `pip install -r` não contam. */
 function installsPackage(segment: string): boolean {
   const t = segment.trim().split(/\s+/);
@@ -96,11 +126,9 @@ export function evaluateBash(command: string, root?: string): Violation[] {
 
   // SEC-001/003: ler ou versionar .env / chaves. `.gitignore` e `.env.example` são ok.
   if (!/\.gitignore\b/.test(command)) {
-    for (const m of command.matchAll(SENSITIVE_TOKEN)) {
-      if (!isSensitivePath(m[2])) continue;
-      out.push(v("SEC-001", "deny", `O comando toca "${m[2]}" (dado sensível; SEC-001/SEC-003). Use o .env.example ou peça ao usuário.`));
-      break;
-    }
+    const hit = command.split(/&&|\|\||;|\|/).map(exposedSensitive).find((t) => t !== null);
+    if (hit)
+      out.push(v("SEC-001", "deny", `O comando toca "${hit}" (dado sensível; SEC-001/SEC-003). Use o .env.example ou peça ao usuário. Carregar sem expor é permitido: --env-file, test/ls, source, ou cp/mv para outro arquivo sensível ou para um diretório terminado em "/".`));
   }
   // SEC-001: dump do ambiente expõe segredos
   if (/(^|[;&|]\s*)(printenv|env|set)\s*($|[;&|])/.test(command.trim()) || /\bGet-ChildItem\s+env:/i.test(command))
@@ -188,6 +216,31 @@ const SECURITY_WEAKENING = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUT
 const TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|test)\s*\(|\.only\s*\(|pytest\.mark\.(skip|xfail)|@pytest\.mark\.skip|@Ignore\b|\[Ignore\]|\bt\.Skip\s*\(|@Disabled\b/;
 const LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
 const DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
+const DEP_BLOCKS = new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]);
+/** Chaves de topo cujo valor tem forma de versão ou URL sem ser dependência. */
+const PKG_META = new Set(["version", "homepage", "repository", "bugs", "funding", "license"]);
+
+/**
+ * Linhas de `source` que declaram dependência: dentro de um bloco de dependências, em qualquer nível. Um trecho de
+ * Edit que não abre na raiz do JSON não diz em que bloco está; ali vale a linha solta, salvo chave de metadado.
+ */
+function dependencyLines(source: { n: number; text: string }[]): Set<number> {
+  const out = new Set<number>();
+  const fragment = !/^\s*\{/.test(source.find((l) => l.text.trim())?.text ?? "");
+  const stack: string[] = [];
+  for (const { n, text } of source) {
+    const key = /^\s*"([^"]+)"\s*:/.exec(text)?.[1];
+    if (key !== undefined && DEP_LINE.test(text)) {
+      const inDeps = stack.some((k) => DEP_BLOCKS.has(k));
+      if (inDeps || (fragment && stack.length === 0 && !PKG_META.has(key))) out.add(n);
+    }
+    const opens = (text.match(/\{/g) ?? []).length;
+    const closes = (text.match(/\}/g) ?? []).length;
+    for (let i = 0; i < opens; i++) stack.push(i === 0 && key !== undefined ? key : "");
+    for (let i = 0; i < closes; i++) stack.pop();
+  }
+  return out;
+}
 
 export function evaluateWrite(input: WriteInput): Violation[] {
   const source = input.after.split(/\r?\n/).map((text, i) => ({ n: i + 1, text }));
@@ -253,12 +306,14 @@ export function evaluateAddedLines(path: string, added: { n: number; text: strin
     }
 
   // DEP-001: dependência adicionada direto no package.json
-  if (file === "package.json")
-    for (const { n, text } of added)
-      if (DEP_LINE.test(text)) {
+  if (file === "package.json") {
+    const deps = dependencyLines(source);
+    for (const { n } of added)
+      if (deps.has(n)) {
         out.push(v("DEP-001", "ask", `package.json:${n} adiciona/altera dependência. Verifique DEP-001, DEP-006 e informe o motivo (DEP-003); major só com pedido (DEP-005).`));
         break;
       }
+  }
 
   // DOC-*, SCOPE-001: referências indevidas em comentários (erros bloqueiam; alertas só informam)
   for (const f of scanLines(path, added, ext, scan, source)) out.push(v(f.rule, f.severity === "error" ? "deny" : "warn", `${file}:${f.line} ${f.message}`));
