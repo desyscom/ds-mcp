@@ -72,6 +72,23 @@ w("src/a.ts", "", "const apiKey = process.env.API_KEY;", "ok");
 w(".env.example", "", "API_KEY=AKIAABCDEFGHIJKLMNOP", "ok"); // exemplo é livre
 w(".env", "", "API_KEY=abc", "ask", "SEC-003");
 w("src/a.spec.ts", "", "it.skip('faz algo', () => {});", "deny", "TEST-003");
+// TEST-003: supressão com motivo na mesma linha só avisa; sem motivo, pede confirmação
+const ESL = "eslint-" + "disable-next-line";
+const PRAGMA = "#pragma warning " + "disable";
+w("src/a.ts", "", `// ${ESL} no-console -- log de diagnóstico exigido pelo suporte\nconsole.log(1);`, "warn", "TEST-003");
+w("src/a.ts", "", `// ${ESL} no-console -- ok\nconsole.log(1);`, "ask", "TEST-003"); // motivo curto não conta
+w("src/a.ts", "", `// @ts-${"ignore"} o tipo da lib externa está errado na 3.x\nconst x = 1;`, "warn", "TEST-003");
+w("src/A.cs", "", `${PRAGMA} CA1031 // O desmonte não para por uma falha inesperada.\ncatch (Exception e)`, "warn", "TEST-003");
+w("src/A.cs", "", `${PRAGMA} CA1031\ncatch (Exception e)`, "ask", "TEST-003");
+w("src/a.py", "", `x = 1  # no${"qa"}: E501  # URL longa não quebra sem perder o link`, "warn", "TEST-003");
+w("src/a.go", "", `//no${"lint"}:errcheck // o fechamento do log não tem para onde reportar`, "warn", "TEST-003");
+w("src/a.ts", "", `// ${ESL} no-console -- log de diagnóstico exigido pelo suporte\n// ${ESL} no-alert\nalert(1);`, "ask", "TEST-003"); // uma sem motivo basta
+{
+  const cs = evaluateWrite({ path: "src/A.cs", before: "", after: `${PRAGMA} CA1031\ncatch (Exception e)`, root: "." }).find((x) => x.rule === "TEST-003");
+  assert.match(cs.message, /#pragma warning disable REGRA \/\/ motivo/);
+  assert.doesNotMatch(cs.message, /@ts-expect-error/); // a dica segue a linguagem do arquivo
+  n++;
+}
 w("src/a.spec.ts", "it.skip('antigo', () => {});", "it.skip('antigo', () => {});\nit('novo', () => {});", "ok"); // já existia
 w("src/a.ts", "", "// eslint-disable-next-line no-console\nconsole.log(1);", "ask", "TEST-003");
 w("src/a.ts", "", "const agent = { rejectUnauthorized: false };", "ask", "SEC-005");

@@ -4365,6 +4365,22 @@ var PLACEHOLDER = /(x{3,}|your[_-]|changeme|change-me|example|placeholder|dummy|
 var SECURITY_WEAKENING = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|origin\s*:\s*["']\*["']|--no-verify-ssl|strict-ssl\s*[=:]\s*false/;
 var TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|test)\s*\(|\.only\s*\(|pytest\.mark\.(skip|xfail)|@pytest\.mark\.skip|@Ignore\b|\[Ignore\]|\bt\.Skip\s*\(|@Disabled\b/;
 var LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
+var MIN_SUPPRESSION_REASON = 10;
+function hasSuppressionReason(text) {
+  const m = LINT_DISABLE.exec(text);
+  if (!m) return false;
+  const rest = text.slice(m.index + m[0].length).replace(/\*\/\s*$/, "");
+  const reason = m[0].startsWith("@ts-") ? rest.replace(/^[\s:-]+/, "") : /(?:\s--\s|\/\/|#)(.*)$/.exec(rest)?.[1] ?? "";
+  return reason.trim().length >= MIN_SUPPRESSION_REASON;
+}
+function suppressionHint(ext) {
+  if ([".ts", ".tsx", ".mts", ".cts"].includes(ext)) return "prefira `// @ts-expect-error motivo`; no ESLint, `// eslint-disable-next-line regra -- motivo`";
+  if ([".js", ".jsx", ".mjs", ".cjs"].includes(ext)) return "use `// eslint-disable-next-line regra -- motivo`";
+  if (ext === ".cs") return "use `#pragma warning disable REGRA // motivo` e o `restore` logo depois";
+  if (ext === ".py") return "use `# noqa: REGRA  # motivo` ou `# type: ignore[c\xF3digo]  # motivo`";
+  if (ext === ".go") return "use `//nolint:regra // motivo`";
+  return "ponha o motivo na mesma linha da supress\xE3o";
+}
 var DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 var DEP_BLOCKS = /* @__PURE__ */ new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]);
 var PKG_META = /* @__PURE__ */ new Set(["version", "homepage", "repository", "bugs", "funding", "license"]);
@@ -4427,11 +4443,12 @@ function evaluateAddedLines(path, added, root, scan = {}, source = added) {
         break;
       }
   }
-  for (const { n, text } of added)
-    if (LINT_DISABLE.test(text)) {
-      out.push(v("TEST-003", "ask", `${file}:${n} desabilita lint/checagem de tipos. N\xE3o fa\xE7a isso para fazer algo passar (TEST-003). Prefira @ts-expect-error com motivo, se inevit\xE1vel.`));
-      break;
-    }
+  const suppressions = added.filter((l) => LINT_DISABLE.test(l.text));
+  const bare = suppressions.find((l) => !hasSuppressionReason(l.text));
+  if (bare)
+    out.push(v("TEST-003", "ask", `${file}:${bare.n} desabilita lint/checagem de tipos sem motivo. N\xE3o fa\xE7a isso para fazer algo passar (TEST-003). Se inevit\xE1vel, ${suppressionHint(ext)}.`));
+  else if (suppressions.length)
+    out.push(v("TEST-003", "warn", `${file}:${suppressions[0].n} desabilita lint/checagem de tipos com motivo. Confirme que \xE9 inevit\xE1vel e registre no relat\xF3rio (TEST-003).`));
   if (file === "package.json") {
     const deps = dependencyLines(source);
     for (const { n } of added)

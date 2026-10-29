@@ -215,6 +215,30 @@ const PLACEHOLDER = /(x{3,}|your[_-]|changeme|change-me|example|placeholder|dumm
 const SECURITY_WEAKENING = /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["']?0|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|origin\s*:\s*["']\*["']|--no-verify-ssl|strict-ssl\s*[=:]\s*false/;
 const TEST_DISABLE = /\b(it|test|describe)\.(skip|only|todo)\b|\bx(it|describe|test)\s*\(|\.only\s*\(|pytest\.mark\.(skip|xfail)|@pytest\.mark\.skip|@Ignore\b|\[Ignore\]|\bt\.Skip\s*\(|@Disabled\b/;
 const LINT_DISABLE = /eslint-disable|@ts-ignore|@ts-nocheck|#\s*noqa\b|\/\/\s*nolint\b|#pragma warning disable|#\s*type:\s*ignore\b/;
+const MIN_SUPPRESSION_REASON = 10;
+
+/**
+ * A supressão traz o motivo na mesma linha, na forma de cada ferramenta: `-- motivo` no ESLint, `// motivo` depois
+ * do `#pragma` do C# e do `//nolint` do Go, `# motivo` depois do `noqa` e do `type: ignore`, e o texto livre que o
+ * TypeScript aceita depois do `@ts-ignore`.
+ */
+function hasSuppressionReason(text: string): boolean {
+  const m = LINT_DISABLE.exec(text);
+  if (!m) return false;
+  const rest = text.slice(m.index + m[0].length).replace(/\*\/\s*$/, "");
+  const reason = m[0].startsWith("@ts-") ? rest.replace(/^[\s:-]+/, "") : (/(?:\s--\s|\/\/|#)(.*)$/.exec(rest)?.[1] ?? "");
+  return reason.trim().length >= MIN_SUPPRESSION_REASON;
+}
+
+/** Forma da supressão com motivo na linguagem do arquivo. */
+function suppressionHint(ext: string): string {
+  if ([".ts", ".tsx", ".mts", ".cts"].includes(ext)) return "prefira `// @ts-expect-error motivo`; no ESLint, `// eslint-disable-next-line regra -- motivo`";
+  if ([".js", ".jsx", ".mjs", ".cjs"].includes(ext)) return "use `// eslint-disable-next-line regra -- motivo`";
+  if (ext === ".cs") return "use `#pragma warning disable REGRA // motivo` e o `restore` logo depois";
+  if (ext === ".py") return "use `# noqa: REGRA  # motivo` ou `# type: ignore[código]  # motivo`";
+  if (ext === ".go") return "use `//nolint:regra // motivo`";
+  return "ponha o motivo na mesma linha da supressão";
+}
 const DEP_LINE = /^\s*"(@?[\w./-]+)"\s*:\s*"(?:[\^~<>=]*\d[\w.\-+*xX ]*|\*|latest|workspace:[^"]*|npm:[^"]*|git[^"]*|https?:[^"]*)"\s*,?\s*$/;
 const DEP_BLOCKS = new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]);
 /** Chaves de topo cujo valor tem forma de versão ou URL sem ser dependência. */
@@ -299,11 +323,12 @@ export function evaluateAddedLines(path: string, added: { n: number; text: strin
         out.push(v("TEST-003", "deny", `${file}:${n} desabilita/isola teste (skip/only/xfail). Determine se o código está errado ou o comportamento mudou (TEST-003).`));
         break;
       }
-  for (const { n, text } of added)
-    if (LINT_DISABLE.test(text)) {
-      out.push(v("TEST-003", "ask", `${file}:${n} desabilita lint/checagem de tipos. Não faça isso para fazer algo passar (TEST-003). Prefira @ts-expect-error com motivo, se inevitável.`));
-      break;
-    }
+  const suppressions = added.filter((l) => LINT_DISABLE.test(l.text));
+  const bare = suppressions.find((l) => !hasSuppressionReason(l.text));
+  if (bare)
+    out.push(v("TEST-003", "ask", `${file}:${bare.n} desabilita lint/checagem de tipos sem motivo. Não faça isso para fazer algo passar (TEST-003). Se inevitável, ${suppressionHint(ext)}.`));
+  else if (suppressions.length)
+    out.push(v("TEST-003", "warn", `${file}:${suppressions[0].n} desabilita lint/checagem de tipos com motivo. Confirme que é inevitável e registre no relatório (TEST-003).`));
 
   // DEP-001: dependência adicionada direto no package.json
   if (file === "package.json") {
