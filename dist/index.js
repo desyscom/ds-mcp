@@ -41102,7 +41102,7 @@ function evaluateCommitMessage(message, root) {
 }
 
 // src/index.ts
-var server = new McpServer({ name: "ds-mcp", version: "0.2.4" });
+var server = new McpServer({ name: "ds-mcp", version: "0.2.5" });
 var catalog = () => loadCatalog();
 var text = (t) => ({ content: [{ type: "text", text: t }] });
 var render = (d) => `# ${d.title}  \`${d.id}\` (${d.kind})

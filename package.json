@@ -1,6 +1,6 @@
 {
   "name": "ds-mcp",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "MCP server que expõe padrões, guardrails e prompts de desenvolvimento",
   "type": "module",
   "bin": {
