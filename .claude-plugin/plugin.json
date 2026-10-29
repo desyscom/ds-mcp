@@ -1,6 +1,6 @@
 {
   "name": "ds",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Guardrails, padrões e hooks de desenvolvimento (MCP ds-mcp + hooks de bloqueio)",
   "author": { "name": "Roberto Godinho" },
   "userConfig": {
